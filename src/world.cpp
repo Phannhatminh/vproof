@@ -17,7 +17,7 @@ ObjectId World::declare(const std::string& name) {
 
 ObjectId World::tuple(const std::vector<ObjectId>& elems) {
   auto it = tuples_.find(elems);
-  if (it != tuples_.end()) return it->second;  // cùng thành phần thì cùng đối tượng
+  if (it != tuples_.end()) return it->second;  // same components, same object
 
   Object o;
   o.id = static_cast<ObjectId>(objects_.size());
@@ -35,7 +35,7 @@ ObjectId World::tuple(const std::vector<ObjectId>& elems) {
 
 ObjectId World::numeral(const Rational& value) {
   auto it = numerals_.find(value);
-  if (it != numerals_.end()) return it->second;  // cùng giá trị thì cùng đối tượng
+  if (it != numerals_.end()) return it->second;  // same value, same object
 
   Object o;
   o.id = static_cast<ObjectId>(objects_.size());
@@ -70,8 +70,8 @@ void World::tell(ObjectId subject, ObjectId column, bool positive, Reason why) {
   list.push_back(std::move(why));
   journal_.push_back({Undo::ReasonAdded, kNoObject, k, positive});
 
-  // Ghi lại rằng `column` đã được dùng làm cột. Không tra gì, không từ chối
-  // gì — chỉ cung cấp dữ kiện. Bỏ qua chính `Column` để khỏi tự quay vòng.
+  // Record that `column` has been used as a column. Checks nothing, refuses nothing — it
+  // only supplies data. `Column` itself is skipped to avoid looping.
   ObjectId col = columnTag();
   if (column != col && !toldIn(column, col)) {
     Cell& c2 = cells_[{column, col}];
@@ -87,8 +87,8 @@ void World::tellIn(ObjectId subject, ObjectId column, Reason why) {
   bool wasOn = toldIn(subject, column);
   Reason copy = why;
   tell(subject, column, true, std::move(why));
-  // Ghi `p ∈ Holds` thì mệnh đề mà p đại diện cũng được cất. Hai chiều phải
-  // khớp nhau, nếu không thì cả tầng phản chiếu nói dối.
+  // Writing `p ∈ Holds` also stores the proposition p represents. The two directions must
+  // agree, or the whole reflection layer lies.
   if (!wasOn && column == holds_ && holds_ != kNoObject) syncFromHolds(subject, copy);
 }
 
@@ -135,13 +135,13 @@ void World::rollback(Mark m) {
         break;
       }
       case Undo::FlagRaised: {
-        // Cờ này do scope bật lên. Cờ vốn đã bật từ trước scope thì không có
-        // mục FlagRaised nào trong đoạn nhật ký đang gỡ, nên nó không bị tắt.
+        // This flag was raised by the scope. A flag already up before the scope has no
+        // FlagRaised entry in the part of the journal being undone, so it stays up.
         Cell& c = cells_[e.cell];
         (e.positive ? c.in : c.out) = false;
         (e.positive ? c.inStep : c.outStep) = 0;
         if (!c.in && !c.out && c.inReasons.empty() && c.outReasons.empty())
-          cells_.erase(e.cell);  // ô trở lại "chưa ai nói gì"
+          cells_.erase(e.cell);  // the cell goes back to "nobody has said anything"
         break;
       }
       case Undo::PropTold: {
@@ -185,7 +185,7 @@ void World::rollback(Mark m) {
 }
 
 
-// ---------------------------------------------------------------- mệnh đề
+// ---------------------------------------------------------------- propositions
 
 PropId World::intern(Prop p) {
   auto it = propIndex_.find(p);
@@ -199,9 +199,9 @@ PropId World::intern(Prop p) {
 }
 
 PropId World::atom(Term subject, Term column, bool positive) {
-  // Term ground quy ngay về đối tượng, nên một mệnh đề nguyên tử có đúng một
-  // hình dạng. Không có chuyện `(a, b) ∈ R` viết theo hai kiểu ra hai PropId
-  // khác nhau mà cùng trỏ vào một ô.
+  // Ground terms resolve to an object right away, so an atomic proposition has exactly one
+  // shape. `(a, b) ∈ R` cannot be written two ways that give two different PropIds pointing
+  // at the same cell.
   auto normalize = [this](Term t) {
     return ground(t) ? Term::of(resolve(t)) : t;
   };
@@ -279,7 +279,8 @@ ObjectId World::resolve(const Term& t) {
 
 void World::tell(PropId id, Reason why) {
   const Prop& p = props_[id];
-  // Nguyên tử ground có chỗ lưu riêng, có chỉ mục: ma trận. Còn lại vào kho.
+  // Ground atoms have their own indexed storage: the matrix. Everything else goes into the
+  // store.
   if (p.kind == PropKind::Atom && ground(p.subject) && ground(p.column)) {
     ObjectId s = resolve(p.subject), c = resolve(p.column);
     if (p.positive) tellIn(s, c, why);
@@ -306,8 +307,8 @@ const std::vector<Reason>& World::propReasons(PropId id) const {
   static const std::vector<Reason> none;
   const Prop& p = props_[id];
   if (p.kind == PropKind::Atom && ground(p.subject) && ground(p.column)) {
-    // Term ground quy về đối tượng mà không tạo gì mới nếu tuple đã có.
-    // Tra lý do không được phép làm thế giới lớn lên, nên chỉ đọc.
+    // Resolve a ground term to an object without creating anything if the tuple already
+    // exists. Looking up reasons must not make the world grow, so this only reads.
     auto lookup = [this](const Term& t) -> ObjectId {
       if (t.kind == TermKind::Obj) return t.obj;
       std::vector<ObjectId> ids;
@@ -327,7 +328,7 @@ const std::vector<Reason>& World::propReasons(PropId id) const {
 }
 
 std::string World::showProp(PropId id) const {
-  std::vector<std::string> binders;  // trong ra ngoài
+  std::vector<std::string> binders;  // innermost first
   std::function<std::string(PropId)> go = [&](PropId cur) -> std::string {
     const Prop& p = props_[cur];
     std::function<std::string(const Term&)> term = [&](const Term& t) -> std::string {
@@ -369,11 +370,12 @@ std::string World::showProp(PropId id) const {
 }
 
 
-// ---------------------------------------------------------------- áp luật
+// ---------------------------------------------------------------- rule application
 
 namespace {
 
-// Thế Var(depth) bằng đối tượng, và hạ mọi biến tự do ngoài hơn xuống một bậc.
+// Replace Var(depth) with the object, and shift every free variable further out down by
+// one.
 Term substTerm(const Term& t, VarId depth, ObjectId with) {
   switch (t.kind) {
     case TermKind::Obj:
@@ -473,7 +475,7 @@ World::StepResult World::applyRule(PropId rule, const std::vector<ObjectId>& arg
                                    const std::string& label, int line) {
   StepResult res;
 
-  // Bóc từng binder ngoài cùng, thế đối tượng người viết đưa vào.
+  // Peel the outermost binders one by one, substituting the objects the author supplied.
   PropId body = rule;
   std::vector<std::pair<std::string, ObjectId>> binding;
   for (ObjectId a : args) {
@@ -484,7 +486,7 @@ World::StepResult World::applyRule(PropId rule, const std::vector<ObjectId>& arg
     body = instantiate(body, a);
   }
 
-  // Thân có thể là `if tiền đề then kết luận`, hoặc là kết luận luôn.
+  // The body is either `if premises then conclusion`, or just the conclusion.
   PropId conclusion = body;
   std::vector<PropId> premises;
   if (props_[body].kind == PropKind::Implies) {
@@ -495,7 +497,7 @@ World::StepResult World::applyRule(PropId rule, const std::vector<ObjectId>& arg
   for (PropId prem : premises) {
     if (!holds(prem)) {
       res.missing = prem;
-      return res;  // bước không đi được; không ghi gì
+      return res;  // the step does not go through; nothing is written
     }
   }
 
@@ -510,7 +512,7 @@ World::StepResult World::applyRule(PropId rule, const std::vector<ObjectId>& arg
 }
 
 
-// ------------------------------------------------- bản sao đứng một mình
+// ------------------------------------------------- standalone copies
 
 World::PropTree World::snapshot(PropId id) const {
   const Prop& p = props_[id];
@@ -558,7 +560,7 @@ void World::objectsIn(PropId id, std::vector<ObjectId>& out) const {
 }
 
 
-// ------------------------------------------------- mệnh đề là đối tượng
+// ------------------------------------------------- propositions as objects
 
 ObjectId World::tag(const std::string& name) {
   auto it = tags_.find(name);
@@ -614,8 +616,8 @@ ObjectId World::represent(PropId id) {
     case PropKind::Not:     rep = tuple({tag("Not"), represent(p.left)}); break;
     case PropKind::ForAll:
     case PropKind::Exists:
-      // Có cấu trúc: thân được đại diện luôn, với biến buộc thành `(Var, k)`.
-      // Nên luật nhìn vào ruột một mệnh đề có lượng từ viết được.
+      // Structured: the body is represented too, with bound variables as `(Var, k)`. So
+      // rules that look inside a quantified proposition can be written.
       rep = tuple({tag(p.kind == PropKind::ForAll ? "All" : "Ex"), represent(p.left)});
       break;
   }
@@ -624,7 +626,8 @@ ObjectId World::represent(PropId id) {
   propOf_[rep] = id;
   journal_.push_back({Undo::RepCreated, rep, {}, true, id});
 
-  // Đại diện sinh ra sau khi mệnh đề đã được cất thì Holds phải bắt kịp ngay.
+  // A representative created after its proposition was stored must catch up with Holds
+  // immediately.
   if (holds(id)) {
     Reason why = Reason::derive("holds", 0);
     why.antecedents = {Antecedent{id}};
@@ -640,8 +643,8 @@ PropId World::representedBy(ObjectId rep) const {
 
 void World::syncFromProp(PropId id, const Reason& base) {
   auto it = repOf_.find(id);
-  if (it == repOf_.end()) return;           // chưa ai gọi tên nó như một đối tượng
-  if (toldIn(it->second, holdsColumn())) return;  // đã đồng bộ rồi
+  if (it == repOf_.end()) return;           // nobody has named it as an object yet
+  if (toldIn(it->second, holdsColumn())) return;  // already in sync
   Reason why = Reason::derive("holds", base.line);
   why.antecedents = {Antecedent{id}};
   tellIn(it->second, holdsColumn(), std::move(why));

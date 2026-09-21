@@ -10,18 +10,18 @@
 
 namespace v {
 
-using CellKey = std::pair<ObjectId, ObjectId>;  // (vị trí phần tử, vị trí cột)
+using CellKey = std::pair<ObjectId, ObjectId>;  // (element position, column position)
 
-// Một tiền đề của bước đã sinh ra kết luận. Tiền đề là một mệnh đề — có thể là
-// một cờ ở một ô, có thể là một mục trong kho; cả hai đều là PropId, nên cây lý
-// do bắc qua hai chỗ lưu mà không cần phân biệt.
+// One premise of the step that produced a conclusion. A premise is a proposition — it may
+// be a flag in a cell or an entry in the store; both are PropIds, so the reason tree spans
+// both places without distinguishing them.
 struct Antecedent {
   PropId prop = kNoProp;
 };
 
-// Lý do: vì sao một cờ bật. Hai loại, và chỉ hai.
-//   đặt ra  — một câu trong chương trình nói thẳng; giữ dòng nguồn.
-//   suy ra  — một bước áp luật; giữ luật, binding, và các tiền đề.
+// Reason: why a flag is raised. Two kinds, and only two.
+//   stipulated — a statement in the program said it outright; keeps the source line.
+//   derived    — a rule application; keeps the rule, the binding, and the premises.
 struct Reason {
   bool stipulated = true;
   int line = 0;
@@ -44,30 +44,30 @@ struct Reason {
   }
 };
 
-// Một ô mang hai cờ độc lập. Không có luật nào nối chúng, và không có nhãn
-// "conflict": cả hai cùng bật là một trạng thái bình thường.
+// A cell carries two independent flags. No rule links them, and there is no "conflict"
+// label: both being raised is an ordinary state.
 struct Cell {
   bool in = false, out = false;
   Step inStep = 0, outStep = 0;
   std::vector<Reason> inReasons, outReasons;
 };
 
-using Mark = size_t;  // vị trí trong nhật ký
+using Mark = size_t;  // position in the journal
 
 class World {
  public:
-  // --- Kho đối tượng ---
-  ObjectId declare(const std::string& name);              // luôn ra đối tượng mới
-  ObjectId tuple(const std::vector<ObjectId>& elems);     // danh tính theo thành phần
-  ObjectId numeral(const Rational& value);                // danh tính theo giá trị
+  // --- Object store ---
+  ObjectId declare(const std::string& name);              // always a new object
+  ObjectId tuple(const std::vector<ObjectId>& elems);     // identity by components
+  ObjectId numeral(const Rational& value);                // identity by value
 
   const Object& obj(ObjectId id) const { return objects_[id]; }
   size_t objectCount() const { return objects_.size(); }
   std::string show(ObjectId id) const;
 
-  // --- Ma trận membership ---
-  // Ghi luôn thành công. Cờ chỉ bật, không tắt. Bật lại một cờ đã bật thì
-  // chỉ thêm một lý do nữa — giữ hết, không thay thế.
+  // --- Membership matrix ---
+  // Writing always succeeds. Flags are only raised, never lowered. Raising a flag that is
+  // already up only adds another reason — all are kept, none replaced.
   void tellIn(ObjectId subject, ObjectId column, Reason why);
   void tellOut(ObjectId subject, ObjectId column, Reason why);
 
@@ -78,9 +78,9 @@ class World {
 
   size_t cellCount() const { return cells_.size(); }
 
-  // --- Kho mệnh đề ---
-  // Mệnh đề được intern theo cấu trúc: dựng cùng một hình dạng hai lần thì ra
-  // cùng một PropId. Vì biến buộc lưu theo chỉ số, alpha-đổi-tên là miễn phí.
+  // --- Proposition store ---
+  // Propositions are interned by structure: building the same shape twice gives the same
+  // PropId. Bound variables are stored as indices, so alpha-renaming is free.
   PropId atom(Term subject, Term column, bool positive);
   PropId conj(PropId a, PropId b);
   PropId disj(PropId a, PropId b);
@@ -94,33 +94,34 @@ class World {
   size_t propCount() const { return props_.size(); }
   std::string showProp(PropId id) const;
 
-  // Cất và tra. Nguyên tử ground đi vào ma trận; còn lại vào kho.
+  // Store and look up. Ground atoms go into the matrix; everything else goes into the
+  // store.
   void tell(PropId id, Reason why);
   bool holds(PropId id);
   const std::vector<Reason>& propReasons(PropId id) const;
 
-  // --- Áp luật ---
-  // Thế đối tượng vào các biến buộc ngoài cùng, tra từng tiền đề, ghi kết luận.
-  // Tra chứ không tìm: tiền đề nào chưa có thì bước không đi được.
+  // --- Rule application ---
+  // Substitute objects for the outermost bound variables, look up each premise, record the
+  // conclusion. Lookup, not search: if a premise is missing, the step does not go through.
   struct StepResult {
     bool ok = false;
     PropId conclusion = kNoProp;
-    PropId missing = kNoProp;  // tiền đề đầu tiên tra không thấy
+    PropId missing = kNoProp;  // first premise not found
   };
   StepResult applyRule(PropId rule, const std::vector<ObjectId>& args,
                        const std::string& label, int line);
 
-  // Thế một đối tượng vào biến buộc ngoài cùng của một mệnh đề có binder.
+  // Substitute an object for the outermost bound variable of a proposition with a binder.
   PropId instantiate(PropId binderProp, ObjectId with);
-  // Điền term vào các lỗ của một mẫu Notation.
+  // Fill the holes of a Notation template with terms.
   PropId fillHoles(PropId templateProp, const std::vector<Term>& args);
 
-  // Tách một tiền đề ghép bằng `and` ở tầng ngoài thành danh sách tiền đề.
+  // Split a premise joined by top-level `and` into a list of premises.
   std::vector<PropId> premisesOf(PropId antecedent) const;
 
-  // Bản sao đứng một mình của một mệnh đề. Thoát scope phải dựng mệnh đề trước,
-  // quay về mốc, rồi mới cất — nên mệnh đề đó phải sống qua được cú quay về,
-  // trong khi mọi PropId dựng trong scope thì bị gỡ.
+  // A standalone copy of a proposition. Leaving a scope must build the proposition first,
+  // roll back to the mark, and only then store it — so the proposition has to survive the
+  // rollback, while every PropId built inside the scope is removed.
   struct PropTree {
     PropKind kind = PropKind::Atom;
     Term subject, column;
@@ -131,34 +132,35 @@ class World {
   PropTree snapshot(PropId id) const;
   PropId rebuild(const PropTree& t);
 
-  // Đối tượng nào xuất hiện trong một mệnh đề — để kiểm kết luận thoát scope
-  // không nhắc tới nhân chứng đã biến mất.
+  // Which objects occur in a proposition — used to check that a conclusion leaving a scope
+  // does not mention a witness that has disappeared.
   void objectsIn(PropId id, std::vector<ObjectId>& out) const;
 
-  // Term ground quy về một đối tượng; tuple term dựng ra đối tượng tuple.
+  // A ground term resolves to one object; a tuple term builds a tuple object.
   bool ground(const Term& t) const;
   ObjectId resolve(const Term& t);
 
-  // --- Mệnh đề là đối tượng ---
-  // Cơ chế cung cấp đúng một thứ: cái ghép. Ghép lười — đại diện chỉ sinh ra
-  // khi bài chứng minh gọi tên nó.
+  // --- Propositions as objects ---
+  // The mechanism provides exactly one thing: the pairing. The pairing is lazy — a
+  // representative comes into existence only when the proof names it.
   //
-  // Đại diện là term có cấu trúc dựng từ chính đại diện con, nên nhìn vào là
-  // đọc được hình dạng. `Holds` là một ô như mọi ô, nên nó theo scope.
+  // A representative is a structured term built from the representatives of the parts, so
+  // its shape can be read off. `Holds` is a cell like any other, so it follows scopes.
   ObjectId represent(PropId id);
-  // Đại diện của một term, dùng khi đi vào thân một binder: biến buộc ở chỉ số
-  // k thành `(Var, k)`. Dùng chỉ số chứ không dùng tên là bắt buộc — hai mệnh
-  // đề chỉ khác tên biến buộc là cùng một mệnh đề, nên đại diện phải trùng.
+  // Representative of a term, used inside the body of a binder: the bound variable at index
+  // k becomes `(Var, k)`. Indices rather than names are required — two propositions
+  // differing only in bound-variable names are the same proposition, so their
+  // representatives must coincide.
   ObjectId representTerm(const Term& t);
   PropId representedBy(ObjectId rep) const;
   ObjectId holdsColumn();
-  // Quan hệ ghi lại việc một đối tượng đã được dùng làm cột. Cơ chế không tra
-  // gì trước khi ghi vào một ô — `alice ∈ 5` viết được — nhưng nó ghi lại, để
-  // lý thuyết có đủ dữ kiện mà tự phán xét.
+  // Relation recording that an object has been used as a column. The mechanism checks
+  // nothing before writing a cell — `alice ∈ 5` can be written — but it records it, so that
+  // theories have the data to judge for themselves.
   ObjectId columnTag();
   ObjectId tag(const std::string& name);
 
-  // --- Nhật ký ---
+  // --- Journal ---
   Mark mark() const { return journal_.size(); }
   void rollback(Mark m);
 
@@ -179,15 +181,15 @@ class World {
   };
 
   PropId intern(Prop p);
-  // Giữ `Holds` đồng bộ với kho, cả hai chiều. Đây là nghĩa vụ của cơ chế và
-  // là diện tích tin cậy của toàn bộ tầng phản chiếu.
+  // Keep `Holds` in sync with the store, in both directions. This is an obligation of the
+  // mechanism and is the trust surface of the whole reflection layer.
   void syncFromProp(PropId id, const Reason& why);
   void syncFromHolds(ObjectId rep, const Reason& why);
 
   Cell& cellFor(CellKey k);
   void tell(ObjectId subject, ObjectId column, bool positive, Reason why);
 
-  std::deque<Object> objects_;  // deque: tham chiếu không hỏng khi kho lớn lên
+  std::deque<Object> objects_;  // deque: references stay valid as the store grows
   std::map<CellKey, Cell> cells_;
   std::map<std::vector<ObjectId>, ObjectId> tuples_;
   std::map<Rational, ObjectId> numerals_;

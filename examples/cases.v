@@ -1,5 +1,5 @@
 -- P, P → Q∨R, Q → S, R → S  ⊢  not (not S)
--- Bốn scope lồng nhau. `or` dùng như bộ kích hoạt mâu thuẫn, không chia nhánh.
+-- Four nested scopes. `or` is used as a contradiction trigger, not a case split.
 
 Let t be an entity.
 Let P, Q, R, S be sets.

@@ -18,7 +18,7 @@ Prover::Result Prover::missing(PropId p) const {
   return r;
 }
 
-// ------------------------------------------------------------------ đặt ra
+// ------------------------------------------------------------------ stipulating
 
 Prover::Result Prover::assume(PropId p, int line) {
   w_.tell(p, Reason::stipulate(line));
@@ -28,7 +28,7 @@ Prover::Result Prover::assume(PropId p, int line) {
   return r;
 }
 
-// ---------------------------------------------------------------- đưa vào
+// ---------------------------------------------------------------- introduction
 
 Prover::Result Prover::introAnd(PropId a, PropId b, int line) {
   if (!w_.holds(a)) return missing(a);
@@ -48,7 +48,7 @@ Prover::Result Prover::introAnd(PropId a, PropId b, int line) {
 Prover::Result Prover::introOr(PropId held, PropId other, bool heldOnLeft, int line) {
   if (!w_.holds(held)) return missing(held);
 
-  // Vế kia không phải tra gì: nó được chọn tự do.
+  // The other side needs no lookup: it is chosen freely.
   PropId out = heldOnLeft ? w_.disj(held, other) : w_.disj(other, held);
   Reason why = Reason::derive("or", line);
   why.antecedents = {Antecedent{held}};
@@ -85,13 +85,13 @@ Prover::Result Prover::introExists(PropId instance, ObjectId witness,
                                    const std::string& name, int line) {
   if (!w_.holds(instance)) return missing(instance);
 
-  // Trừu tượng hoá: mọi chỗ nhắc tới nhân chứng thành biến buộc của binder mới.
+  // Abstraction: every mention of the witness becomes the bound variable of a new binder.
   std::function<Term(const Term&, VarId)> absTerm = [&](const Term& t, VarId depth) -> Term {
     switch (t.kind) {
       case TermKind::Obj:
         return t.obj == witness ? Term::ofVar(depth) : t;
       case TermKind::Var:
-        return Term::ofVar(t.var + 1);  // nhường chỗ cho binder mới ở ngoài
+        return Term::ofVar(t.var + 1);  // make room for the new outer binder
       case TermKind::Tuple: {
         std::vector<Term> out;
         for (const Term& e : t.elems) out.push_back(absTerm(e, depth));
@@ -127,7 +127,7 @@ Prover::Result Prover::introExists(PropId instance, ObjectId witness,
   return r;
 }
 
-// -------------------------------------------------------------------- dùng
+// -------------------------------------------------------------------- elimination
 
 Prover::Result Prover::elimAnd(PropId conjunction, bool takeLeft, int line) {
   const Prop& p = w_.prop(conjunction);
@@ -165,7 +165,8 @@ Prover::Result Prover::absurd(PropId p, PropId notP, int line) {
   if (!w_.holds(p)) return missing(p);
   if (!w_.holds(notP)) return missing(notP);
 
-  // Hai cách chỉ ra vô lý: `not (A)` bọc chính A, hoặc một ô đã có cả hai cờ.
+  // Two ways to point out an absurdity: `not (A)` wrapping A itself, or one cell with both
+  // flags.
   const Prop& n = w_.prop(notP);
   bool wrapsIt = n.kind == PropKind::Not && n.left == p;
   bool oppositeFlags = false;
@@ -234,7 +235,7 @@ Prover::Result Prover::take(const std::string& name, int line) {
   s.mark = w_.mark();
   s.name = name;
   s.line = line;
-  s.fresh = w_.declare(name);  // chưa ai nói gì về nó
+  s.fresh = w_.declare(name);  // nobody has said anything about it
   scopes_.push_back(s);
 
   Result r;
@@ -272,7 +273,7 @@ Prover::Result Prover::takeFrom(const std::string& name, PropId existential, int
   s.assumption = existential;
   scopes_.push_back(s);
 
-  // Nhân chứng luôn mới: mỗi lần lấy ra một đối tượng khác.
+  // Witnesses are always fresh: each time a different object is taken out.
   PropId about = w_.instantiate(existential, s.fresh);
   Reason why = Reason::derive("take", line);
   why.antecedents = {Antecedent{existential}};
@@ -326,14 +327,16 @@ Prover::Result Prover::hence(PropId stated, const std::string& label, int line) 
     }
   }
 
-  // Dựng mệnh đề trước, quay về mốc, rồi mới cất — nên nó sống ngoài vùng bị gỡ.
+  // Build the proposition first, roll back to the mark, then store it — so it survives
+  // outside the removed region.
   World::PropTree keep = w_.snapshot(stated);
   scopes_.pop_back();
   w_.rollback(s.mark);
   PropId result = w_.rebuild(keep);
 
   Reason why = Reason::derive(label.empty() ? "scope" : label, line);
-  why.antecedents = {};  // thân scope đã bị gỡ; lý do trỏ vào chính bước thoát
+  // The scope body has been removed; the reason points at the exit step itself.
+  why.antecedents = {};
   w_.tell(result, std::move(why));
 
   Result r;

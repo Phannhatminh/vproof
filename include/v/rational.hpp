@@ -3,14 +3,14 @@
 
 namespace v {
 
-// Số hữu tỉ chính xác: tử và mẫu không giới hạn độ lớn, luôn tối giản.
-// GMP nằm sau lớp này và không lộ ra header nào khác, để đổi backend được.
+// Exact rationals: numerator and denominator of unbounded size, always reduced. GMP sits
+// behind this class and is not exposed by any other header, so the backend can be swapped.
 class Rational {
  public:
   Rational();
   Rational(long long n);
   Rational(long long num, long long den);
-  // Đọc "3", "-7/4", "0.1" — thập phân đọc chính xác, 0.1 là 1/10.
+  // Reads "3", "-7/4", "0.1" — decimals are read exactly, 0.1 is 1/10.
   explicit Rational(const std::string& text);
 
   Rational(const Rational&);
@@ -22,8 +22,8 @@ class Rational {
   Rational operator+(const Rational&) const;
   Rational operator-(const Rational&) const;
   Rational operator*(const Rational&) const;
-  // Chia cho 0 ném RationalDivByZero; tầng trên biến nó thành fact
-  // "không có giá trị", không phải lỗi của chương trình.
+  // Division by zero throws RationalDivByZero; the layer above turns it into a "no value"
+  // fact, not a program error.
   Rational operator/(const Rational&) const;
 
   bool operator==(const Rational&) const;

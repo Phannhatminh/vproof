@@ -6,41 +6,41 @@
 
 namespace v {
 
-// Bộ thao tác bước chứng minh. Có đúng hai hình dạng: cái nào buộc biến hoặc
-// rút giả định thì cần scope, còn lại chỉ là tra rồi cất.
+// The proof-step operations. There are exactly two shapes: whatever binds a variable or
+// discharges an assumption needs a scope; everything else is just look up, then store.
 //
-// Prover không giữ trạng thái logic nào của riêng nó ngoài ngăn xếp scope —
-// mọi fact vẫn nằm trong World.
+// Prover keeps no logical state of its own besides the scope stack — every fact still lives
+// in World.
 class Prover {
  public:
   explicit Prover(World& w) : w_(w) {}
 
   struct Result {
     bool ok = false;
-    PropId prop = kNoProp;     // mệnh đề vừa cất
-    PropId missing = kNoProp;  // tiền đề đầu tiên tra không thấy
+    PropId prop = kNoProp;     // the proposition just stored
+    PropId missing = kNoProp;  // first premise not found
     std::string error;
   };
 
-  // --- Đặt ra ---
+  // --- Stipulating ---
   Result assume(PropId p, int line);
 
-  // --- Đưa vào, không scope ---
+  // --- Introduction, no scope ---
   Result introAnd(PropId a, PropId b, int line);
   Result introOr(PropId held, PropId other, bool heldOnLeft, int line);
   Result introIff(PropId aToB, PropId bToA, int line);
-  // Tra A(t), cất `there exists x such that A(x)`: trừu tượng hoá `witness`.
+  // Look up A(t), store `there exists x such that A(x)`: abstracts `witness`.
   Result introExists(PropId instance, ObjectId witness, const std::string& name, int line);
 
-  // --- Dùng, không scope ---
+  // --- Elimination, no scope ---
   Result elimAnd(PropId conjunction, bool takeLeft, int line);
   Result elimIff(PropId equivalence, bool forward, int line);
 
-  // Chỉ ra vô lý. Không nổ: nó chỉ đánh dấu scope hiện tại, để lúc thoát dựng
-  // được `not (...)`.
+  // Point out an absurdity. Does not explode: it only marks the current scope, so that `not
+  // (...)` can be built on exit.
   Result absurd(PropId p, PropId notP, int line);
-  // `or`-dùng: tra `A or B`, `not A`, `not B` — ba mệnh đề riêng biệt — rồi
-  // chỉ ra vô lý. Không chia nhánh, không thế giới song song.
+  // `or` elimination: look up `A or B`, `not A`, `not B` — three separate propositions —
+  // then point out the absurdity. No case split, no parallel worlds.
   Result absurdFromOr(PropId disjunction, PropId notA, PropId notB, int line);
 
   // --- Scope ---
@@ -49,8 +49,8 @@ class Prover {
   Result takeIn(const std::string& name, ObjectId set, int line);
   Result takeFrom(const std::string& name, PropId existential, int line);
 
-  // Thoát: kiểm mệnh đề người viết nêu ra có đúng là thứ scope này dựng được
-  // không, rồi quay về mốc và cất nó.
+  // Exit: check that the stated proposition is what this scope can produce, then roll back
+  // to the mark and store it.
   Result hence(PropId stated, const std::string& label, int line);
 
   size_t depth() const { return scopes_.size(); }

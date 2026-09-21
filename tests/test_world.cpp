@@ -17,7 +17,7 @@ static void check(bool ok, const std::string& what) {
 }
 
 int main() {
-  // --- Kho đối tượng: khai báo luôn ra đối tượng mới ---
+  // --- Object store: a declaration always gives a new object ---
   {
     World w;
     ObjectId a1 = w.declare("alice");
@@ -25,7 +25,7 @@ int main() {
     check(a1 != a2, "hai lần khai báo cùng tên ra hai đối tượng");
   }
 
-  // --- Tuple: danh tính theo thành phần; Let t1 = Let t2 = (a,c) ra 3 đối tượng ---
+  // --- Tuples: identity by components; Let t1 = Let t2 = (a,c) gives 3 objects ---
   {
     World w;
     ObjectId alice = w.declare("alice");
@@ -39,7 +39,7 @@ int main() {
     check(w.objectCount() == 5, "tổng cộng 5 đối tượng: alice, carol, tuple1, tuple2, cặp");
   }
 
-  // --- Numeral: danh tính theo giá trị, thập phân đọc chính xác ---
+  // --- Numerals: identity by value, decimals read exactly ---
   {
     World w;
     check(w.numeral(Rational("0.1")) == w.numeral(Rational(1, 10)), "0.1 là 1/10");
@@ -49,7 +49,8 @@ int main() {
     check(w.obj(big).name == "123456789012345678901234567890", "tử mẫu không giới hạn độ lớn");
   }
 
-  // --- Ma trận: ô vắng là chưa ai nói gì; hai cờ độc lập; ghi luôn thành công ---
+  // --- Matrix: an empty cell means nobody has spoken; two independent flags; writing
+  // always succeeds ---
   {
     World w;
     ObjectId x = w.declare("x"), S = w.declare("S");
@@ -65,7 +66,7 @@ int main() {
           "mỗi cực giữ lý do riêng");
   }
 
-  // --- Giữ hết lý do, và dấu bước không đổi khi bật lại ---
+  // --- All reasons are kept, and the step stamp does not change on re-raise ---
   {
     World w;
     ObjectId x = w.declare("x"), S = w.declare("S");
@@ -76,7 +77,7 @@ int main() {
     check(w.stepOf(x, S, true) == first, "cờ đã bật thì dấu bước giữ nguyên");
   }
 
-  // --- Nhật ký: quay về mốc ---
+  // --- Journal: rolling back to a mark ---
   {
     World w;
     ObjectId x = w.declare("x"), S = w.declare("S"), T = w.declare("T");
@@ -86,8 +87,8 @@ int main() {
     ObjectId tmp = w.declare("w");
     (void)tmp;
     w.tellIn(x, T, Reason::stipulate(2));
-    w.tellIn(x, S, Reason::derive("r", 3));  // cờ vốn đã bật từ trước mốc
-    // 5 = x, S, T, nhãn Column (sinh ở lần ghi đầu), và w tạo trong scope.
+    w.tellIn(x, S, Reason::derive("r", 3));  // flag already raised before the mark
+    // 5 = x, S, T, the Column tag (created on the first write), and w created in the scope.
     check(w.toldIn(x, T) && w.objectCount() == 5, "trong scope: có thêm đối tượng và ô");
 
     w.rollback(m);
@@ -97,7 +98,7 @@ int main() {
     check(w.reasons(x, S, true).size() == 1, "chỉ lý do thêm trong scope bị gỡ");
   }
 
-  // --- Quay lại cũng gỡ intern của tuple và numeral ---
+  // --- Rolling back also removes tuple and numeral interning ---
   {
     World w;
     ObjectId a = w.declare("a"), b = w.declare("b");
@@ -113,7 +114,7 @@ int main() {
           "dựng lại tuple sau khi quay lại thì ra đối tượng mới, bảng intern đã sạch");
   }
 
-  // --- Chia cho 0 là lỗi tài nguyên của tầng số, không phải fact ---
+  // --- Division by zero is a resource error of the number layer, not a fact ---
   {
     bool threw = false;
     try {

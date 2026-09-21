@@ -1,4 +1,4 @@
--- Đóng gói một lý thuyết, rồi thể hiện nó hai lần trên hai thứ khác nhau.
+-- Package a theory, then instantiate it twice on two different things.
 
 Theory Preorder {
     Let Carrier be a set.
@@ -15,7 +15,7 @@ Let Older, Before be relations.
 Import Preorder as Age  with (Carrier := People, Below := Older).
 Import Preorder as Plan with (Carrier := Tasks,  Below := Before).
 
--- Hai thể hiện, hai bộ luật, nhãn mang tên thể hiện.
+-- Two instances, two sets of rules, labels carrying the instance name.
 Let ann, ben, cam be entities.
 Assume (h1): (ann, ben) in Older.
 Assume (h2): (ben, cam) in Older.
@@ -28,13 +28,13 @@ Assume (h3): t1 in Tasks.
 By rule (Plan refl) applied to (t1), it follows that (t1, t1) in Before.
 Therefore (t1, t1) in Before.
 
--- Import lại đúng cặp đó là không làm gì.
+-- Importing the same pair again does nothing.
 Import Preorder as Age with (Carrier := People, Below := Older).
 
 Why (ann, cam) in Older.
 
--- Tên khai báo bên trong mà không được gán thì thành tên riêng của thể hiện,
--- nên hai lần import không giẫm lên nhau.
+-- Names declared inside and left unmapped become names private to the instance, so two
+-- imports do not step on each other.
 Theory Pointed {
     Let Carrier be a set.
     Let basepoint be an entity.
@@ -48,11 +48,11 @@ Import Pointed as Second with (Carrier := B).
 Therefore First_basepoint in A.
 Therefore Second_basepoint in B.
 
--- Và hai điểm đó là hai đối tượng khác nhau: không ai nói gì về quan hệ giữa
--- chúng, nên `(First_basepoint, Second_basepoint) in Eq` là chưa biết.
+-- And the two points are different objects: nobody has said anything about how they relate,
+-- so `(First_basepoint, Second_basepoint) in Eq` is unknown.
 
--- Lý thuyết lồng nhau: `Import` viết được bên trong một `Theory`, và tên của
--- thể hiện con mang tên thể hiện ngoài, nên hai lần import không giẫm nhau.
+-- Nested theories: `Import` can be written inside a `Theory`, and the child instance's name
+-- carries the outer instance name, so two imports do not collide.
 Theory Inner {
     Let Carrier be a set.
     Rule (refl): for every u, if u in Carrier then (u, u) in Eq.

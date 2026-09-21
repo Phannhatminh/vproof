@@ -15,9 +15,9 @@ struct ParseError : std::runtime_error {
       : std::runtime_error("dòng " + std::to_string(line) + ": " + msg), line(line) {}
 };
 
-// Parser dựng thẳng mệnh đề vào World. Tên bề mặt chỉ sống ở đây: biến buộc
-// thành chỉ số de Bruijn, tên đã khai báo thành ObjectId. Runtime không bao
-// giờ thấy một cái tên nào.
+// The parser builds propositions straight into World. Surface names live only here: bound
+// variables become de Bruijn indices, declared names become ObjectIds. The runtime never
+// sees a name.
 using AppliedMap = std::map<std::pair<ObjectId, ObjectId>, ObjectId>;
 
 class Parser {
@@ -25,7 +25,7 @@ class Parser {
   struct Token {
     std::string text;
     int line = 0;
-    bool word = false;  // tên hoặc từ khoá
+    bool word = false;  // name or keyword
     bool number = false;
   };
 
@@ -33,8 +33,9 @@ class Parser {
          std::map<std::string, PropId>& labels)
       : w_(w), names_(names), applied_(applied), labels_(labels) {}
 
-  // Parse và chạy phải xen kẽ: một câu khai báo tên thì câu sau mới tra được
-  // tên đó. Nên parser trả từng câu một chứ không parse cả file trước.
+  // Parsing and running must interleave: a statement that declares a name must run before
+  // later statements can look it up. So the parser hands out one statement at a time
+  // instead of parsing the whole file first.
   void begin(const std::string& source);
   void beginTokens(std::vector<Token> toks);
   bool more() const;
@@ -66,33 +67,33 @@ class Parser {
 
   ObjectId lookup(const std::string& name);
 
-  // Mẫu Notation: dãy phần, mỗi phần là một chữ cố định hoặc một lỗ.
+  // Notation template: a sequence of parts, each a fixed word or a hole.
   struct NotationPart {
-    std::string word;  // rỗng nghĩa là lỗ
+    std::string word;  // empty means hole
     bool hole = false;
   };
   struct Notation {
     std::vector<NotationPart> parts;
     size_t holes = 0;
     PropId tmpl = kNoProp;
-    std::string text;  // nguyên văn, để in ra
-    // `where A in Vectors` — điều kiện để phân giải quá tải. Chỉ kiểm được
-    // khi chỗ điền là một đối tượng cụ thể; biến của luật thì bỏ qua.
+    std::string text;  // verbatim, for printing
+    // `where A in Vectors` — guard for overload resolution. Only checkable when the filler
+    // is a concrete object; rule variables are skipped.
     std::vector<std::pair<size_t, ObjectId>> guards;
   };
   PropId tryNotation();
 
   World& w_;
   std::map<std::string, ObjectId>& names_;
-  // Giá trị canonical của một hàm tại một đối số, do `Apply` tạo ra. Parser
-  // cần nó để đọc `F(a)`, nên nó nằm chung chỗ với bảng tên.
+  // Canonical value of a function at an argument, created by `Apply`. The parser needs it
+  // to read `F(a)`, so it sits alongside the name table.
   AppliedMap& applied_;
   std::map<std::string, PropId>& labels_;
   std::vector<Token> toks_;
   size_t pos_ = 0;
-  std::vector<std::string> binders_;  // trong ra ngoài; chỉ số là vị trí
+  std::vector<std::string> binders_;  // innermost first; the index is the position
   std::vector<Notation> notations_;
-  std::vector<std::string> holeNames_;  // đang mở khi parse vế phải của Notation
+  std::vector<std::string> holeNames_;  // open while parsing a Notation right-hand side
 };
 
 }  // namespace v

@@ -1,6 +1,7 @@
--- Cửa số học. Máy luôn trả kèm sai số; đẳng thức chỉ rơi ra khi sai số bằng 0.
+-- The arithmetic door. The machine always returns an error bound; equality only follows
+-- when the error is 0.
 
--- Nạp dòng này là tuyên bố: tôi tin số học của máy.
+-- Loading this rule is a declaration: I trust the machine's arithmetic.
 Rule (eq comp): for every a, b, if (a, b, 0) in Computed then (a, b) in Eq.
 
 Compute 100 + 101.

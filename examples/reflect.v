@@ -1,5 +1,5 @@
--- Mệnh đề là đối tượng, kể cả mệnh đề có lượng từ. Nên luật nhìn vào ruột
--- một mệnh đề có lượng từ viết được, và nó là luật thường.
+-- Propositions are objects, quantified ones included. So rules that look inside a
+-- quantified proposition can be written, and they are ordinary rules.
 
 Let A, B be sets.
 Let alice be an entity.
@@ -7,10 +7,11 @@ Let alice be an entity.
 Rule (ab): for every x, if x in A then x in B.
 Assume (ha): alice in A.
 
--- Đại diện của một mệnh đề có lượng từ có cấu trúc: biến buộc thành (Var, 0).
+-- The representative of a quantified proposition is structured: the bound variable becomes
+-- (Var, 0).
 Therefore [for every x, if x in A then x in B] in Holds.
 
--- ∀-elim viết thành luật trên đại diện, thay vì là một thao tác của cơ chế.
+-- ∀-elimination written as a rule over representatives, instead of a mechanism operation.
 Rule (all elim): for every p, t, q,
     if p in Holds and (p, t, q) in Instance then q in Holds.
 
@@ -19,7 +20,7 @@ By rule (all elim) applied to ([for every x, if x in A then x in B], alice, [(in
     it follows that [(inst)] in Holds.
 Therefore [(inst)] in Holds.
 
--- Và mệnh đề thật cũng có theo, nhờ đồng bộ ngược của Holds.
+-- And the real proposition follows too, through the reverse sync of Holds.
 Therefore if alice in A then alice in B.
 By rule (inst), it follows that alice in B.
 Therefore alice in B.

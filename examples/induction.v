@@ -1,6 +1,6 @@
--- Quy nạp không phải một câu lệnh của cơ chế. Nó là một tiên đề của lý thuyết,
--- và nó lượng từ trên SET — mà set là đối tượng, nên đó là lượng từ bậc nhất.
--- Bản v0.3 đóng cứng quy nạp vào máy; ở đây nó là một dòng người dùng viết.
+-- Induction is not a mechanism statement. It is an axiom of a theory, and it quantifies
+-- over SET — sets are objects, so that is first-order quantification. v0.3 hard-wired
+-- induction into the machine; here it is one line the user writes.
 
 Let N, P be sets.
 
@@ -11,12 +11,12 @@ Rule (induction): for every S,
     if 0 in S and (for every n, if n in N and n in S then n + 1 in S)
     then (for every n, if n in N then n in S).
 
--- Giả thiết về P: chứa 0, và đóng dưới phép cộng 1.
+-- Assumptions about P: it contains 0, and is closed under adding 1.
 Assume (base): 0 in P.
 Rule (closed): for every m, if m in P then m + 1 in P.
 
--- Bước quy nạp chứng minh bằng scope: lấy một n chưa ai nói gì, giả định vế
--- đầu, suy ra vế sau, rồi thoát hai lần.
+-- The induction step is proved with scopes: take an n nobody has said anything about,
+-- assume the antecedent, derive the consequent, then leave twice.
 Take n {
     Suppose (h): n in N and n in P {
         From (h), it follows that n in P as (np).
@@ -26,7 +26,7 @@ Take n {
 }
 Hence (step): for every n, if n in N and n in P then n + 1 in P.
 
--- Ghép hai vế lại rồi áp tiên đề quy nạp cho chính P.
+-- Put the two parts together, then apply the induction axiom to P itself.
 From (base), (step), it follows that
     0 in P and (for every n, if n in N and n in P then n + 1 in P) as (both).
 
@@ -34,7 +34,7 @@ By rule (induction) applied to (P),
     it follows that for every n, if n in N then n in P.
 Therefore for every n, if n in N then n in P.
 
--- Và dùng nó: 0 thuộc N nên 0 thuộc P; rồi 1 cũng vậy.
+-- And use it: 0 is in N so 0 is in P; then 1 as well.
 By rule (induction) applied to (P), it follows that for every n, if n in N then n in P as (ind).
 By rule (ind) applied to (0), it follows that 0 in P.
 By rule (succ) applied to (0), it follows that 0 + 1 in N.

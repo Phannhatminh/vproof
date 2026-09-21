@@ -1,5 +1,5 @@
--- `there exists`: chỉ ra nhân chứng, rồi lấy nhân chứng ra.
--- Kết luận thoát scope không được nhắc tới nhân chứng.
+-- `there exists`: exhibit a witness, then take a witness out.
+-- The conclusion leaving the scope must not mention the witness.
 
 Let alice be an entity.
 Let P, Q be sets.

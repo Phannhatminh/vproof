@@ -46,8 +46,8 @@ static void expectError(const std::string& name, const std::string& source,
   }
 }
 
-// Mọi khối ```v trong tài liệu ngôn ngữ là một chương trình đầy đủ. Chạy hết
-// chúng để tài liệu không lệch khỏi code.
+// Every ```v block in the language reference is a complete program. Run them all so the
+// reference cannot drift from the code.
 static void runDocBlocks(const std::string& path) {
   std::string text = slurp(path);
   if (text.empty()) {
@@ -108,7 +108,8 @@ int main(int argc, char** argv) {
   runFile(dir + "/induction.v", 2);
   runFile(dir + "/reals.v", 2);
 
-  // Ô chưa ai nói gì thì cả hai cực đều không kiểm được — không phải "sai".
+  // A cell nobody has spoken about checks as neither polarity — which is not the same as
+  // "false".
   {
     Interp interp;
     auto rep = interp.run(
@@ -188,7 +189,7 @@ int main(int argc, char** argv) {
               "Apply Domain to ChildOf.\n",
               "chưa xác lập `ChildOf in MAP`");
 
-  // Điều kiện chưa xác lập thì luật có điều kiện không đi được.
+  // Without the condition established, the conditional rule does not go through.
   expectError("triệt ước mà chưa xác lập điều kiện",
               "Let x be an entity.\n"
               "Rule (r): for every u, v, k,\n"
@@ -198,9 +199,9 @@ int main(int argc, char** argv) {
               "    it follows that (x/x, 1) in Eq.\n",
               "chưa có");
 
-  // Bug hygiene của bản v0.3: biến của luật trùng tên với tên trong vế phải
-  // của notation thì bắt mất nó. Ở đây vế phải đã quy về đối tượng ngay lúc
-  // khai báo, nên chỗ dùng không tra tên nào cả.
+  // The hygiene bug of v0.3: a rule variable with the same name as a name on the notation's
+  // right-hand side captured it. Here the right-hand side is resolved to objects at
+  // declaration, so the use site looks up no names at all.
   expectError("hai mẫu cùng khớp mà không phân biệt được",
               "Let R, S be relations.\n"
               "Let a, b be entities.\n"

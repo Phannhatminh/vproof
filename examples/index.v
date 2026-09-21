@@ -1,4 +1,4 @@
--- Index(N) và so sánh. `a <= b` là cách viết của `(a, b) in LessEq`.
+-- Index(N) and comparisons. `a <= b` is notation for `(a, b) in LessEq`.
 
 Let Naturals be a set.
 Let Index be objects.

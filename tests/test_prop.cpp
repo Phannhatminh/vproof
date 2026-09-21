@@ -12,7 +12,7 @@ static void check(bool ok, const std::string& what) {
 }
 
 int main() {
-  // --- Intern theo cấu trúc ---
+  // --- Interning by structure ---
   {
     World w;
     ObjectId x = w.declare("x"), S = w.declare("S");
@@ -25,7 +25,7 @@ int main() {
     check(w.neg(a1) != neg, "not (t ∈ S) khác t ∉ S");
   }
 
-  // --- Alpha-đổi-tên miễn phí, vì biến buộc lưu theo chỉ số ---
+  // --- Alpha-renaming is free, because bound variables are stored as indices ---
   {
     World w;
     ObjectId A = w.declare("A"), B = w.declare("B");
@@ -38,7 +38,7 @@ int main() {
           "in ra dùng tên của binder được intern trước: " + w.showProp(r1));
   }
 
-  // --- A or B khác B or A ---
+  // --- A or B differs from B or A ---
   {
     World w;
     ObjectId x = w.declare("x"), A = w.declare("A"), B = w.declare("B");
@@ -47,7 +47,7 @@ int main() {
     check(w.disj(a, b) != w.disj(b, a), "A or B và B or A là hai mệnh đề");
   }
 
-  // --- Nguyên tử ground vào ma trận, ghép vào kho ---
+  // --- Ground atoms go into the matrix, compounds into the store ---
   {
     World w;
     ObjectId x = w.declare("x"), A = w.declare("A"), B = w.declare("B");
@@ -57,7 +57,7 @@ int main() {
     check(!w.holds(a), "chưa nói thì chưa có");
     w.tell(a, Reason::stipulate(1));
     check(w.holds(a) && w.toldIn(x, A), "nguyên tử ground đi thẳng vào ma trận");
-    // 2 ô: (x, A) và (A, Column) — cơ chế ghi lại A đã được dùng làm cột.
+    // 2 cells: (x, A) and (A, Column) — the mechanism records that A was used as a column.
     check(w.cellCount() == 2, "và nó là một ô, không phải một mục trong kho");
 
     PropId both = w.conj(a, b);
@@ -67,7 +67,7 @@ int main() {
     check(w.cellCount() == 2, "và nó không đẻ ra ô nào");
   }
 
-  // --- Tuple term dựng ra đối tượng tuple khi cất ---
+  // --- A tuple term builds a tuple object when stored ---
   {
     World w;
     ObjectId a = w.declare("a"), b = w.declare("b"), R = w.declare("R");
@@ -78,7 +78,7 @@ int main() {
     check(w.holds(p), "và ô của nó bật");
   }
 
-  // --- Lý do đi theo mệnh đề ghép ---
+  // --- Reasons follow compound propositions ---
   {
     World w;
     ObjectId x = w.declare("x"), A = w.declare("A"), B = w.declare("B");
@@ -90,7 +90,7 @@ int main() {
     check(!w.toldIn(x, A) && !w.toldIn(x, B), "A or B không bật cờ ở ô nào");
   }
 
-  // --- Quay về mốc gỡ cả mệnh đề lẫn mục trong kho ---
+  // --- Rolling back removes both the propositions and the store entries ---
   {
     World w;
     ObjectId x = w.declare("x"), A = w.declare("A"), B = w.declare("B");
@@ -109,7 +109,7 @@ int main() {
     check(w.holds(a), "mệnh đề có từ trước scope thì còn");
   }
 
-  // --- Dựng lại sau khi quay lại thì intern vẫn đúng ---
+  // --- Rebuilding after a rollback still interns correctly ---
   {
     World w;
     ObjectId x = w.declare("x"), A = w.declare("A");

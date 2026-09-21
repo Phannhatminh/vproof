@@ -1,5 +1,5 @@
--- Đưa `for every` vào bằng scope: lấy một đối tượng chưa ai nói gì,
--- chứng minh về nó, rồi thoát.
+-- Introducing `for every` with a scope: take an object nobody has said anything about,
+-- prove something about it, then leave.
 
 Let A, B, C be sets.
 
@@ -14,7 +14,7 @@ Hence (ac): for every x, if x in A then x in C.
 
 Therefore for every x, if x in A then x in C.
 
--- Và dùng lại nó như một luật bình thường.
+-- And use it again as an ordinary rule.
 Let alice be an entity.
 Assume (h): alice in A.
 By rule (ac) applied to (alice), it follows that alice in C.

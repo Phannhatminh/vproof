@@ -1,5 +1,5 @@
--- Notation: cách viết, không phải cơ chế. Nó mở ra đúng một mệnh đề, và
--- runtime không bao giờ biết có notation nào tồn tại.
+-- Notation: a way of writing, not mechanism. It unfolds into exactly one proposition, and
+-- the runtime never knows any notation exists.
 
 Let Boss, Mentor be relations.
 Let alice, bob, carol be entities.
@@ -19,7 +19,7 @@ Therefore alice manages carol.
 Therefore (alice, carol) in Boss.
 Why (alice, carol) in Boss.
 
--- Quá tải: hai mẫu cùng hình dạng, phân biệt bằng `where`.
+-- Overloading: two templates with the same shape, told apart by `where`.
 Let Vectors, Scalars be sets.
 Let VecSum, NumSum be relations.
 Let u, v, s, t be entities.

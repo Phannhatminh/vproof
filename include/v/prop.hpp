@@ -9,14 +9,14 @@ namespace v {
 using PropId = uint32_t;
 constexpr PropId kNoProp = UINT32_MAX;
 
-using VarId = uint32_t;  // chỉ số de Bruijn: đếm ngược ra ngoài qua các binder
+using VarId = uint32_t;  // de Bruijn index: counts outward through the binders
 
-// Lỗ của một mẫu Notation, đánh số từ kHole. Để riêng khỏi chỉ số de Bruijn
-// nên một mẫu không bao giờ bắt nhầm biến buộc ở chỗ dùng.
+// Holes of a Notation template, numbered from kHole. Kept apart from de Bruijn indices so a
+// template can never capture a bound variable at the use site.
 constexpr VarId kHole = 1u << 20;
 
-// Term đứng ở hai vị trí của một mệnh đề nguyên tử. Lá là handle, không phải
-// tên bề mặt — đó là chỗ bản cũ hỏng, và là điều kiện để runtime đứng một mình.
+// A term in either position of an atomic proposition. Leaves are handles, not surface names
+// — that is where the old version broke, and it is what lets the runtime stand on its own.
 enum class TermKind { Obj, Var, Tuple };
 
 struct Term {
@@ -50,19 +50,19 @@ struct Term {
 
 enum class PropKind { Atom, And, Or, Implies, Iff, Not, ForAll, Exists };
 
-// Mệnh đề. Nguyên tử mang hai term và một cực — `t ∉ S` là Atom cực âm, còn
-// `not (t ∈ S)` là Not bọc một Atom cực dương: hai mệnh đề khác nhau.
-// ForAll/Exists buộc đúng một biến; `for every x, y, A` là hai binder lồng.
+// A proposition. An atom carries two terms and a polarity — `t ∉ S` is a negative Atom,
+// while `not (t ∈ S)` is a Not wrapping a positive Atom: two different propositions.
+// ForAll/Exists bind exactly one variable; `for every x, y, A` is two nested binders.
 struct Prop {
   PropKind kind = PropKind::Atom;
 
   Term subject, column;   // Atom
   bool positive = true;   // Atom
 
-  PropId left = kNoProp;  // And/Or/Implies/Iff/Not, và body của binder
+  PropId left = kNoProp;  // And/Or/Implies/Iff/Not, and the body of a binder
   PropId right = kNoProp; // And/Or/Implies/Iff
 
-  std::string binderName;  // chỉ để in ra
+  std::string binderName;  // for printing only
 
   bool sameShape(const Prop& o) const;
   bool shapeLess(const Prop& o) const;

@@ -1,4 +1,4 @@
--- Bắc cầu trên một quan hệ, viết bằng luật và áp luật.
+-- Transitivity on a relation, written as a rule and applied.
 
 Let alice, bob, carol be entities.
 Let Boss be a relation.

@@ -47,13 +47,13 @@ void Interp::whyChain(PropId p, int depth, Report& rep) const {
   }
 }
 
-// Khớp một term cụ thể với một term có biến buộc ở chỉ số `depth`.
+// Match a concrete term against a term with a bound variable at index `depth`.
 bool Interp::matchTerm(const Term& concrete, const Term& pattern, VarId depth,
                        ObjectId& witness) const {
   if (pattern.kind == TermKind::Var) {
     if (pattern.var != depth) return concrete.kind == TermKind::Var && concrete.var == pattern.var;
     if (concrete.kind != TermKind::Obj) return false;
-    if (witness != kNoObject && witness != concrete.obj) return false;  // phải cùng một nhân chứng
+    if (witness != kNoObject && witness != concrete.obj) return false;  // must be the same witness
     witness = concrete.obj;
     return true;
   }
@@ -94,7 +94,7 @@ Rational Interp::evalExpr(const Term& t, int line) {
   if (op == "Plus") return a + b;
   if (op == "Minus") return a - b;
   if (op == "Times") return a * b;
-  if (op == "Div") return a / b;  // ném RationalDivByZero, bắt ở chỗ gọi
+  if (op == "Div") return a / b;  // throws RationalDivByZero, caught by the caller
   throw ParseError(line, "phép toán lạ: " + op);
 }
 
@@ -111,11 +111,11 @@ void Interp::exec(const Stmt& s, Report& rep) {
         ObjectId t = w_.declare(s.names[0]);
         names_[s.names[0]] = t;
         ObjectId built = w_.resolve(Term::ofTuple(elems));
-        // `Let t = (a, b)` ghi vào quan hệ của cơ chế, không ghi vào Eq.
+        // `Let t = (a, b)` writes into a mechanism relation, not into Eq.
         w_.tellIn(w_.tuple({t, built}), w_.tag("Defined"), Reason::stipulate(s.line));
       } else {
-        // `be a set` / `be a relation` là nội dung, không phải loại của cơ chế:
-        // nó ghi một fact vào SET hoặc RELATION, đúng như mọi fact khác.
+        // `be a set` / `be a relation` is content, not a mechanism type: it records a fact
+        // in SET or RELATION, like any other fact.
         ObjectId column = kNoObject;
         if (s.letKind == "set") column = names_["SET"];
         else if (s.letKind == "relation") column = names_["RELATION"];
@@ -171,9 +171,9 @@ void Interp::exec(const Stmt& s, Report& rep) {
       } else if (out.kind == PropKind::Iff && ps.size() == 2) {
         res = pv_.introIff(ps[0], ps[1], s.line);
       } else if (out.kind == PropKind::Exists && ps.size() == 1) {
-        // Nhân chứng đọc ra bằng một lượt khớp mẫu giữa tiền đề và thân kết
-        // luận: chỗ nào thân có biến buộc thì tiền đề có đối tượng, và mọi
-        // chỗ như vậy phải là cùng một đối tượng. Tra chứ không thử.
+        // The witness is read off by one pass of matching the premise against the body of
+        // the conclusion: wherever the body has the bound variable the premise has an
+        // object, and all those places must hold the same object. Lookup, not trial.
         ObjectId witness = kNoObject;
         if (!matchWitness(ps[0], out.left, 0, witness) || witness == kNoObject)
           throw ParseError(s.line, "không đọc được nhân chứng từ tiền đề");
@@ -227,7 +227,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
     }
 
     case StmtKind::Close:
-      return;  // `}` chỉ đóng thân; `Hence` mới làm việc
+      return;  // `}` only closes the body; `Hence` does the work
 
     case StmtKind::Hence: {
       auto r = pv_.hence(s.prop, s.label, s.line);
@@ -240,7 +240,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
         for (const std::string& n : frames_.back().names) names_.erase(n);
         frames_.pop_back();
       }
-      bind(s.label, r.prop);  // nhãn của Hence thuộc scope bên ngoài
+      bind(s.label, r.prop);  // the Hence label belongs to the enclosing scope
       return;
     }
 
@@ -259,8 +259,9 @@ void Interp::exec(const Stmt& s, Report& rep) {
       ObjectId F = w_.resolve(s.fn), a = w_.resolve(s.arg);
 
       if (!s.names.empty()) {
-        // Dạng `as`: đặt ra giá trị canonical, không tra miền. Đây là chỗ cắt
-        // vòng — `Apply Domain to Domain as MAP.` cùng loại với `SET ∈ SET`.
+        // The `as` form: stipulates the canonical value without checking the domain. This
+        // is where the chain is cut — `Apply Domain to Domain as MAP.` is of the same kind
+        // as `SET ∈ SET`.
         auto it = names_.find(s.names[0]);
         if (it == names_.end()) throw ParseError(s.line, "chưa khai báo: " + s.names[0]);
         applied_[{F, a}] = it->second;
@@ -268,9 +269,10 @@ void Interp::exec(const Stmt& s, Report& rep) {
         return;
       }
 
-      // Áp hàm không phải thao tác của cơ chế: nó dịch xuống việc tra miền rồi
-      // lấy một nhân chứng. Miền là kết quả của một bước áp hàm khác.
-      // `Domain` là tên do prelude khai báo, không phải nhãn của cơ chế.
+      // Function application is not a mechanism operation. In meaning it is a domain lookup
+      // followed by taking a witness; here it is done directly, with the domain check being
+      // an ordinary cell lookup. The domain is itself the result of another application.
+      // `Domain` is a name declared by the prelude, not a mechanism tag.
       auto domIt = names_.find("Domain");
       if (domIt == names_.end()) throw ParseError(s.line, "chưa có `Domain`");
       auto d = applied_.find({domIt->second, F});
@@ -281,7 +283,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
         throw ParseError(s.line, "chưa xác lập `" + w_.show(a) + " in " + w_.show(d->second) + "`");
 
       auto have = applied_.find({F, a});
-      if (have != applied_.end()) return;  // đã có giá trị canonical
+      if (have != applied_.end()) return;  // canonical value already exists
 
       ObjectId value = w_.declare(w_.show(F) + "(" + w_.show(a) + ")");
       applied_[{F, a}] = value;
@@ -292,7 +294,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
     }
 
     case StmtKind::Theory: {
-      theories_[s.names[0]] = s;  // ghi lại, không chạy
+      theories_[s.names[0]] = s;  // record only, do not run
       return;
     }
 
@@ -301,7 +303,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
       if (it == theories_.end()) throw ParseError(s.line, "chưa có lý thuyết " + s.names[0]);
       const Stmt& th = it->second;
 
-      // Danh tính thể hiện: tên lý thuyết cộng ánh xạ. Import lại là no-op.
+      // Instance identity: theory name plus mapping. Re-importing is a no-op.
       std::string key = s.names[0];
       for (const auto& m : th.mapping) (void)m;
       for (const auto& m : s.mapping) key += "|" + m.first + "=" + m.second;
@@ -310,8 +312,8 @@ void Interp::exec(const Stmt& s, Report& rep) {
       std::map<std::string, std::string> rename;
       for (const auto& m : s.mapping) rename[m.first] = m.second;
 
-      // Tên khai báo bên trong mà không được gán thì đổi thành tên riêng của
-      // thể hiện, để hai lần import không giẫm lên nhau.
+      // Names declared inside and left unmapped are renamed to names private to the
+      // instance, so two imports do not step on each other.
       for (size_t i = 0; i + 2 < th.body.size(); ++i) {
         if (th.body[i].first != "Let") continue;
         size_t j = i + 1;
@@ -322,15 +324,15 @@ void Interp::exec(const Stmt& s, Report& rep) {
         }
       }
 
-      // Nhãn đứng ngay sau các từ mở nhãn; chúng cũng mang tên thể hiện.
+      // Labels come right after label-opening words; they also carry the instance name.
       auto opensLabel = [](const std::string& w) {
         return w == "Rule" || w == "Assume" || w == "Suppose" || w == "Hence" ||
                w == "rule" || w == "from" || w == "From";
       };
 
-      // Lý thuyết lồng nhau: tên của thể hiện con và tên lý thuyết khai bên
-      // trong cũng phải mang tên thể hiện ngoài, nếu không thì hai lần import
-      // cùng một lý thuyết sẽ giẫm lên nhau.
+      // Nested theories: the names of child instances and of theories declared inside must
+      // carry the outer instance name too, or importing the same theory twice would make
+      // them collide.
       auto nestedName = [&](size_t i) {
         if (i >= 1 && th.body[i - 1].first == "Theory") return true;
         if (i >= 3 && th.body[i - 1].first == "as" && th.body[i - 3].first == "Import")
@@ -340,7 +342,8 @@ void Interp::exec(const Stmt& s, Report& rep) {
 
       std::vector<Parser::Token> out;
       for (size_t i = 0; i < th.body.size(); ++i) {
-        // Giữ số dòng gốc trong thân lý thuyết, để lỗi bên trong báo đúng chỗ.
+        // Keep the original line numbers of the theory body, so errors inside it point at
+        // the right place.
         Parser::Token t{th.body[i].first, th.body[i].second, th.bodyWord[i], th.bodyNumber[i]};
         if (t.word) {
           auto r = rename.find(t.text);
@@ -365,9 +368,9 @@ void Interp::exec(const Stmt& s, Report& rep) {
         throw ParseError(s.line, "cần một mệnh đề có lượng từ");
       ObjectId t = w_.resolve(s.expr);
 
-      // Phép thế trên đại diện không viết lại: nó là giải mã, dùng đúng
-      // `instantiate` mà áp luật đang dùng, rồi mã hoá lại. Hai phép thế do
-      // đó không thể lệch nhau.
+      // Substitution on representatives is not reimplemented: it decodes, uses the very
+      // `instantiate` that rule application uses, and encodes again. So the two
+      // substitutions cannot drift apart.
       PropId inst = w_.instantiate(all, t);
       w_.tellIn(w_.tuple({w_.represent(all), t, w_.represent(inst)}), w_.tag("Instance"),
                 Reason::derive("thể hiện", s.line));
@@ -382,9 +385,9 @@ void Interp::exec(const Stmt& s, Report& rep) {
         throw ParseError(s.line, "Expand cần một dãy liệt kê");
       ObjectId listed = w_.resolve(s.expr);
 
-      // Dạng chuẩn của một dãy là dạng hàm: một set các cặp (chỉ số, phần tử).
-      // Dạng liệt kê không bị bỏ — hai đối tượng cùng tồn tại, và bước này là
-      // chỗ nối chúng, tường minh.
+      // The canonical form of a sequence is the function form: a set of (index, element)
+      // pairs. The listed form is not dropped — both objects exist, and this step is where
+      // they are joined, explicitly.
       std::string name = s.names.empty() ? "fn" + w_.show(listed) : s.names[0];
       ObjectId fn = w_.declare(name);
       if (!s.names.empty()) names_[s.names[0]] = fn;
@@ -412,12 +415,13 @@ void Interp::exec(const Stmt& s, Report& rep) {
       std::string shown = "  gọn  dòng " + std::to_string(s.line) + ": " + w_.show(expr) +
                           "  ->  " + w_.show(result);
       if (nonzero.empty()) {
-        // Không triệt gì có chứa biến, nên đẳng thức không kèm điều kiện.
+        // Nothing containing a variable was cancelled, so the equality carries no
+        // condition.
         w_.tellIn(w_.tuple({expr, result}), w_.tag("Simplified"),
                   Reason::derive("đại số", s.line));
       } else {
-        // Có triệt: điều kiện đi ra ngoài thành một mệnh đề phải xác lập, chứ
-        // không nằm ngầm trong đẳng thức.
+        // Something was cancelled: the condition goes outside as a proposition that has to
+        // be established, instead of hiding inside the equality.
         ObjectId Eq = names_["Eq"], zero = w_.numeral(Rational(0));
         PropId cond = kNoProp;
         for (const Term& t : nonzero) {
@@ -427,7 +431,8 @@ void Interp::exec(const Stmt& s, Report& rep) {
         w_.tellIn(w_.tuple({expr, result, w_.represent(cond)}), w_.tag("SimplifiedIf"),
                   Reason::derive("đại số", s.line));
         shown += "   với điều kiện  " + w_.showProp(cond);
-        bind(s.label, cond);  // trích lại điều kiện bằng nhãn, khỏi chép tay
+        // Lets the condition be referred to by label instead of copied by hand.
+        bind(s.label, cond);
       }
       rep.lines.push_back(shown);
       return;
@@ -435,8 +440,8 @@ void Interp::exec(const Stmt& s, Report& rep) {
 
     case StmtKind::Compute: {
       if (!s.cmpOp.empty()) {
-        // Máy quyết định so sánh và ghi lại cả hai chiều: đúng thì bật cờ ∈,
-        // sai thì bật cờ ∉. Lý do ghi rõ đây là máy tính ra.
+        // The machine decides the comparison and records both directions: true raises the ∈
+        // flag, false raises the ∉ flag. The reason says it was machine-computed.
         Rational a = evalExpr(s.expr, s.line), b = evalExpr(s.rhs, s.line);
         bool flip = s.cmpOp[0] == '>';
         bool strict = s.cmpOp.size() == 1;
@@ -455,7 +460,8 @@ void Interp::exec(const Stmt& s, Report& rep) {
       ObjectId expr = w_.resolve(s.expr);
       try {
         Rational value = evalExpr(s.expr, s.line);
-        // Máy luôn trả kèm sai số. Bốn phép trên hữu tỉ thì sai số bằng 0.
+        // The machine always returns an error bound. For the four operations on rationals
+        // the error is 0.
         ObjectId result = w_.numeral(value);
         ObjectId error = w_.numeral(Rational(0));
         w_.tellIn(w_.tuple({expr, result, error}), w_.tag("Computed"),
@@ -463,7 +469,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
         rep.lines.push_back("  tính  dòng " + std::to_string(s.line) + ": " + w_.show(expr) +
                             " = " + w_.show(result) + " (sai số " + w_.show(error) + ")");
       } catch (const RationalDivByZero&) {
-        // Không lỗi, không quy ước giá trị: ghi một fact vào quan hệ của cơ chế.
+        // No error, no conventional value: record a fact in a mechanism relation.
         w_.tellIn(expr, w_.tag("NoValue"), Reason::derive("chia cho 0", s.line));
         rep.lines.push_back("  tính  dòng " + std::to_string(s.line) + ": " + w_.show(expr) +
                             " không có giá trị");
@@ -490,7 +496,8 @@ void Interp::exec(const Stmt& s, Report& rep) {
 
 Interp::Report Interp::run(const std::string& source) {
   Report rep;
-  // Nhãn của cơ chế dùng được như tên thường, để viết luật trên đại diện.
+  // Mechanism tags are usable as ordinary names, so rules over representatives can be
+  // written.
   for (const char* t : {"Mem", "NotMem", "And", "Or", "Implies", "Iff", "Not", "All", "Ex",
                         "Defined", "Computed", "NoValue",
                         "Plus", "Minus", "Times", "Div", "Less", "LessEq", "Pow", "Simplified", "SimplifiedIf", "Expanded", "Var", "Instance"})
@@ -498,8 +505,8 @@ Interp::Report Interp::run(const std::string& source) {
   names_["Holds"] = w_.holdsColumn();
   names_["Column"] = w_.columnTag();
 
-  // Thư viện tối thiểu là nội dung viết bằng V, không phải mã C++. Nạp nó
-  // bằng đúng cái máy chạy file người dùng.
+  // The minimal library is content written in V, not C++ code. It is loaded by the same
+  // machinery that runs the user's file.
   if (!preludeLoaded_) {
     preludeLoaded_ = true;
     Report ignored;

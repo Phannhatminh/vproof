@@ -1,10 +1,11 @@
--- Thư viện cổ điển viết trên đại diện, rồi dùng để đóng ví dụ cases.v.
--- `[A]` là đối tượng đại diện cho mệnh đề A. `Holds` là quan hệ của cơ chế.
+-- A classical library written over representatives, then used to finish the cases.v
+-- example.
+-- `[A]` is the object representing proposition A. `Holds` is a mechanism relation.
 
 Let t be an entity.
 Let P, Q, R, S be sets.
 
--- Phủ định kép. Một luật, áp cho mọi mệnh đề.
+-- Double negation. One rule, for every proposition.
 Rule (dne): for every p, if (Not, (Not, p)) in Holds then p in Holds.
 
 Assume (p):   t in P.
@@ -30,7 +31,8 @@ Suppose (ns): not (t in S) {
 }
 Hence (nns): not (not (t in S)).
 
--- Gọi tên đại diện của kết luận vừa có, rồi áp phủ định kép một dòng.
+-- Name the representative of the conclusion just obtained, then apply double negation in
+-- one line.
 Therefore [not (not (t in S))] in Holds.
 By rule (dne) applied to ([t in S]), it follows that [t in S] in Holds.
 

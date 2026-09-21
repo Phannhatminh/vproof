@@ -10,7 +10,7 @@ namespace {
 
 bool isWordChar(unsigned char c) { return std::isalnum(c) || c == '_' || c == '\''; }
 
-// Ký tự nhiều byte dùng được ở dạng unicode lẫn ascii.
+// Multi-byte characters accepted in both their unicode and ascii forms.
 const char* kIn = "∈";     // ∈
 const char* kNotIn = "∉";  // ∉
 
@@ -23,21 +23,21 @@ void Parser::lex(const std::string& src) {
     char c = src[i];
     if (c == '\n') { ++line; ++i; continue; }
     if (std::isspace(static_cast<unsigned char>(c))) { ++i; continue; }
-    if (c == '-' && i + 1 < src.size() && src[i + 1] == '-') {  // comment tới hết dòng
+    if (c == '-' && i + 1 < src.size() && src[i + 1] == '-') {  // comment to end of line
       while (i < src.size() && src[i] != '\n') ++i;
       continue;
     }
     if (src.compare(i, 3, kIn) == 0) { toks_.push_back({"in", line, true, false}); i += 3; continue; }
     if (src.compare(i, 3, kNotIn) == 0) { toks_.push_back({"notin", line, true, false}); i += 3; continue; }
-    // `-` chỉ thuộc về con số khi nó không đứng sau một term đã xong —
-    // nếu không thì `a - 3` sẽ lex thành `a` và `-3`.
+    // `-` belongs to the number only when it does not follow a finished term — otherwise `a
+    // - 3` would lex as `a` and `-3`.
     bool afterTerm = !toks_.empty() && (toks_.back().word || toks_.back().number ||
                                         toks_.back().text == ")" || toks_.back().text == "]");
     if (std::isdigit(static_cast<unsigned char>(c)) ||
         (c == '-' && !afterTerm && i + 1 < src.size() &&
          std::isdigit(static_cast<unsigned char>(src[i + 1])))) {
-      // `.` và `/` chỉ thuộc về con số khi sau nó còn chữ số — nếu không thì
-      // dấu chấm kết câu trong `Compute 0.2.` sẽ bị nuốt.
+      // `.` and `/` belong to the number only when a digit follows — otherwise the full
+      // stop ending `Compute 0.2.` would be swallowed.
       size_t j = i + 1;
       while (j < src.size()) {
         unsigned char ch = static_cast<unsigned char>(src[j]);
@@ -110,11 +110,11 @@ ObjectId Parser::lookup(const std::string& name) {
 
 // ------------------------------------------------------------------- term
 
-// `2 + 3` là một term riêng: tuple (Plus, 2, 3). Nó khác đối tượng `5`, và
-// nối hai cái là việc của một bước `Compute`, không phải của parser.
+// `2 + 3` is a term of its own: the tuple (Plus, 2, 3). It is a different object from `5`,
+// and connecting the two is the job of a `Compute` step, not of the parser.
 Term Parser::term() {
-  // Dấu trừ đứng đầu. Với một con số thì nó thuộc luôn về con số, để `-1`
-  // viết trong nguồn và `-1` do tầng đại số sinh ra là cùng một đối tượng.
+  // Leading minus. In front of a number it belongs to the number, so that `-1` written in
+  // source and `-1` produced by the algebra layer are the same object.
   if (at("-")) {
     take();
     if (peek().number) {
@@ -168,10 +168,11 @@ Term Parser::powLevel() {
 
 Term Parser::atomTerm() {
   if (at("[")) {
-    // `[A]` là đối tượng đại diện cho mệnh đề A. Gọi tên nó ở đây chính là
-    // hành động làm nó sinh ra — ghép lười.
+    // `[A]` is the object representing proposition A. Naming it here is exactly what brings
+    // it into existence — lazy pairing.
     //
-    // `[(nhãn)]` trỏ tới mệnh đề đã có nhãn, khỏi phải chép lại nó.
+    // `[(label)]` points at a proposition that already has a label, so it need not be
+    // copied out.
     take();
     if (at("(")) {
       size_t k = pos_;
@@ -194,7 +195,7 @@ Term Parser::atomTerm() {
     elems.push_back(term());
     while (accept(",")) elems.push_back(term());
     expect(")");
-    if (elems.size() == 1) return elems[0];  // ngoặc chỉ để nhóm
+    if (elems.size() == 1) return elems[0];  // parentheses only group
     return Term::ofTuple(std::move(elems));
   }
   if (peek().number) {
@@ -204,8 +205,8 @@ Term Parser::atomTerm() {
   if (!atWord()) err("cần một term, gặp `" + peek().text + "`");
   Token t = take();
   if (at("(")) {
-    // `F(a)` là áp hàm: nó trỏ tới đối tượng do một bước `Apply F to a.` tạo
-    // ra. Chưa có bước đó thì chưa có đối tượng nào mang tên này.
+    // `F(a)` is function application: it points at the object created by an `Apply F to a.`
+    // step. Until that step has run, no object has this name.
     take();
     Term arg = term();
     expect(")");
@@ -214,16 +215,17 @@ Term Parser::atomTerm() {
       err("`" + t.text + "(...)` chưa có — cần `Apply " + t.text + " to ...` trước");
     return Term::of(it->second);
   }
-  // Lỗ của mẫu Notation tra trước hết — chúng chỉ mở khi đang parse vế phải.
+  // Notation holes are looked up first — they are only open while parsing a right-hand
+  // side.
   for (size_t i = 0; i < holeNames_.size(); ++i)
     if (holeNames_[i] == t.text) return Term::ofVar(kHole + static_cast<VarId>(i));
-  // Rồi tới biến buộc: chỉ số là vị trí trong ngăn xếp binder.
+  // Then bound variables: the index is the position in the binder stack.
   for (size_t i = 0; i < binders_.size(); ++i)
     if (binders_[i] == t.text) return Term::ofVar(static_cast<VarId>(i));
   return Term::of(lookup(t.text));
 }
 
-// -------------------------------------------------------------- mệnh đề
+// -------------------------------------------------------------- propositions
 
 PropId Parser::proposition() { return iffLevel(); }
 
@@ -251,8 +253,8 @@ PropId Parser::andLevel() {
   return left;
 }
 
-// Thử khớp một mẫu Notation tại vị trí hiện tại. Dài nhất thắng; không mẫu
-// nào khớp thì trả kNoProp và con trỏ không xê dịch.
+// Try to match a Notation template at the current position. Longest match wins; if none
+// matches, return kNoProp and leave the cursor where it was.
 PropId Parser::tryNotation() {
   size_t save = pos_;
   size_t bestEnd = 0;
@@ -278,7 +280,7 @@ PropId Parser::tryNotation() {
     }
     if (!ok || args.size() != n.holes) continue;
 
-    // Điều kiện `where`: chỉ lọc được khi chỗ điền đã là đối tượng cụ thể.
+    // `where` guards: can only filter when the filler is already a concrete object.
     bool guarded = true;
     for (const auto& [i, set] : n.guards) {
       if (i >= args.size() || !w_.ground(args[i])) continue;
@@ -309,8 +311,8 @@ PropId Parser::primary() {
     if (got != kNoProp) return got;
   }
   if (at("(")) {
-    // Có thể là nhóm mệnh đề, hoặc là tuple mở đầu một mệnh đề nguyên tử.
-    // Thử nhóm trước; hỏng thì quay lại đọc như term.
+    // Either a parenthesised proposition, or a tuple starting an atomic proposition. Try
+    // the group first; if that fails, back up and read a term.
     size_t save = pos_;
     take();
     try {
@@ -335,9 +337,9 @@ PropId Parser::primary() {
   if (at("for") && peek(1).text == "every") {
     take(); take();
 
-    // `for every x, y, z, A` và `for every x, alice in A` không phân biệt được
-    // bằng một lần nhìn: dấu phẩy vừa ngăn biến vừa ngăn thân. Nên gom tối đa
-    // rồi lùi dần cho tới khi phần còn lại đúng là `, <thân>`.
+    // `for every x, y, z, A` and `for every x, alice in A` cannot be told apart at a
+    // glance: the comma separates variables and also separates the body. So take as many as
+    // possible, then back off until what remains really is `, <body>`.
     size_t save = pos_;
     size_t most = 1;
     {
@@ -373,12 +375,12 @@ PropId Parser::primary() {
     }
     if (!settled) err("sau danh sách biến cần một dấu phẩy rồi tới thân");
 
-    // Biến đầu danh sách là binder ngoài cùng, nên nó có chỉ số lớn nhất;
-    // biến cuối danh sách là trong cùng, chỉ số 0.
+    // The first variable in the list is the outermost binder, so it gets the largest index;
+    // the last variable is innermost, index 0.
     for (const std::string& v : vars) binders_.insert(binders_.begin(), v);
     PropId body = proposition();
     if (!setName.empty()) {
-      // `for every x, y in S, A` là viết tắt của các ràng buộc thành viên lồng.
+      // `for every x, y in S, A` abbreviates nested membership guards.
       ObjectId set = lookup(setName);
       for (size_t i = 0; i < vars.size(); ++i) {
         VarId idx = static_cast<VarId>(vars.size() - 1 - i);
@@ -406,11 +408,11 @@ PropId Parser::primary() {
     return w_.exists(var, body);
   }
 
-  // Nguyên tử: term (in | notin) term, hoặc một so sánh.
+  // Atom: term (in | notin) term, or a comparison.
   Term subject = term();
 
-  // `a <= b` là cách viết của `(a, b) in LessEq`. So sánh không phải một loại
-  // mệnh đề riêng — nó vẫn là một ô, như mọi thứ khác.
+  // `a <= b` is notation for `(a, b) in LessEq`. A comparison is not a separate kind of
+  // proposition — it is still a cell, like everything else.
   if (at("<") || at("<=") || at(">") || at(">=")) {
     std::string op = take().text;
     Term rhs = term();
@@ -428,9 +430,9 @@ PropId Parser::primary() {
   return w_.atom(std::move(subject), std::move(column), positive);
 }
 
-// ------------------------------------------------------------- câu lệnh
+// ------------------------------------------------------------- statements
 
-// Nhãn nhiều chữ được: `(eq comp)`, `(no vote)`.
+// Labels may have several words: `(eq comp)`, `(no vote)`.
 std::string Parser::labelOpt() {
   if (!at("(")) return {};
   take();
@@ -444,8 +446,8 @@ std::string Parser::labelOpt() {
 }
 
 std::vector<std::string> Parser::refList() {
-  // Dấu phẩy vừa ngăn các nhãn vừa đứng trước `it follows that`, nên chỉ đi
-  // tiếp khi sau dấu phẩy thật sự là một nhãn nữa.
+  // The comma separates labels and also precedes `it follows that`, so only continue when
+  // what follows the comma really is another label.
   std::vector<std::string> out;
   out.push_back(labelOpt());
   while (at(",") && peek(1).text == "(") {
@@ -477,7 +479,7 @@ Stmt Parser::statement() {
       expect(")");
     } else {
       expect("be");
-      // `a set`, `an entity`, `relations` — mạo từ bỏ đi, danh từ giữ lại.
+      // `a set`, `an entity`, `relations` — drop the article, keep the noun.
       while (!at(".") && !peek().text.empty()) {
         std::string word = take().text;
         if (word == "a" || word == "an" || word == "the") continue;
@@ -493,8 +495,8 @@ Stmt Parser::statement() {
     s.kind = at("Assume") ? StmtKind::Assume : StmtKind::Rule;
     take();
     s.label = labelOpt();
-    // `Assume (c).` không viết lại mệnh đề: nó đặt ra đúng cái mệnh đề đã mang
-    // nhãn đó. Dùng cho điều kiện mà tầng đại số nêu ra.
+    // `Assume (c).` does not restate the proposition: it stipulates exactly the proposition
+    // already carrying that label. Used for conditions produced by the algebra layer.
     if (accept(".")) {
       auto it = labels_.find(s.label);
       if (it == labels_.end()) err("chưa có nhãn (" + s.label + ")");
@@ -555,7 +557,7 @@ Stmt Parser::statement() {
     s.names.push_back(take().text);
     if (accept("with")) {
       s.kind = StmtKind::TakeIn;
-      take();  // tên biến lặp lại
+      take();  // the variable name, repeated
       expect("in");
       s.setName = take().text;
     } else if (accept("from")) {
@@ -592,8 +594,8 @@ Stmt Parser::statement() {
     s.kind = StmtKind::Theory;
     s.names.push_back(take().text);
     expect("{");
-    // Thân giữ nguyên ở dạng token: tên bên trong chưa có nghĩa cho tới khi
-    // Import gán chúng vào đâu đó.
+    // The body is kept as tokens: names inside have no meaning until Import binds them to
+    // something.
     int depth = 1;
     while (!peek().text.empty()) {
       if (at("{")) ++depth;
@@ -665,9 +667,9 @@ Stmt Parser::statement() {
 
     expect("means");
 
-    // Chữ nào trong mẫu là lỗ thì phải đọc vế phải mới biết. Lượt một coi mọi
-    // chữ là lỗ, xem vế phải dùng tới chữ nào; lượt hai đọc lại với đúng
-    // những chữ đó. Chữ không được dùng là chữ cố định.
+    // Which template words are holes can only be known by reading the right-hand side. Pass
+    // one treats every word as a hole and sees which ones the right-hand side uses; pass
+    // two reads it again with exactly those. Unused words are fixed words.
     size_t rhs = pos_;
     holeNames_ = words;
     PropId first = proposition();
@@ -705,7 +707,7 @@ Stmt Parser::statement() {
     pos_ = rhs;
     n.tmpl = proposition();
 
-    // `where A in Vectors, B in Vectors` — điều kiện phân giải quá tải.
+    // `where A in Vectors, B in Vectors` — overload resolution guards.
     if (accept("where")) {
       do {
         std::string hole = take().text;
@@ -722,7 +724,7 @@ Stmt Parser::statement() {
     holeNames_.clear();
 
     notations_.push_back(std::move(n));
-    s.kind = StmtKind::Close;  // không sinh ra việc gì cho runtime
+    s.kind = StmtKind::Close;  // produces nothing for the runtime
     return s;
   }
 

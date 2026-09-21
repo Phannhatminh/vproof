@@ -12,7 +12,7 @@ static void check(bool ok, const std::string& what) {
 }
 
 int main() {
-  // --- Luật một biến, một tiền đề ---
+  // --- One-variable rule, one premise ---
   {
     World w;
     ObjectId alice = w.declare("alice"), A = w.declare("A"), B = w.declare("B");
@@ -32,7 +32,7 @@ int main() {
     check(w.showProp(ok.conclusion) == "alice ∈ B", "kết luận đúng hình dạng");
   }
 
-  // --- Lý do mang luật, binding, và tiền đề ---
+  // --- The reason carries the rule, the binding, and the premises ---
   {
     World w;
     ObjectId alice = w.declare("alice"), A = w.declare("A"), B = w.declare("B");
@@ -52,7 +52,7 @@ int main() {
           "giữ tiền đề đã tra");
   }
 
-  // --- Nhiều biến, tuple, bắc cầu ---
+  // --- Several variables, tuples, transitivity ---
   {
     World w;
     ObjectId a = w.declare("a"), b = w.declare("b"), c = w.declare("c");
@@ -80,7 +80,7 @@ int main() {
           "tiền đề ghép bằng and tách ra thành hai tiền đề");
   }
 
-  // --- Kết luận âm ---
+  // --- Negative conclusion ---
   {
     World w;
     ObjectId kim = w.declare("kim"), Minors = w.declare("Minors"), Voters = w.declare("Voters");
@@ -92,7 +92,7 @@ int main() {
     check(!w.toldIn(kim, Voters), "và không đụng cờ dương");
   }
 
-  // --- Luật không có tiền đề ---
+  // --- Rule with no premises ---
   {
     World w;
     ObjectId n = w.declare("n"), N = w.declare("N");
@@ -101,7 +101,7 @@ int main() {
     check(res.ok && w.toldIn(n, N), "luật không tiền đề áp được ngay");
   }
 
-  // --- Kết luận là mệnh đề ghép thì vào kho ---
+  // --- A compound conclusion goes into the store ---
   {
     World w;
     ObjectId x = w.declare("x"), S = w.declare("S"), P = w.declare("P"), Q = w.declare("Q");
@@ -115,7 +115,7 @@ int main() {
     check(!w.toldIn(x, P) && !w.toldIn(x, Q), "và không tự tách ra thành hai ô");
   }
 
-  // --- Bước không đi được thì thế giới không đổi ---
+  // --- A step that does not go through leaves the world unchanged ---
   {
     World w;
     ObjectId x = w.declare("x"), A = w.declare("A"), B = w.declare("B");

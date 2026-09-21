@@ -12,7 +12,7 @@ static void check(bool ok, const std::string& what) {
 }
 
 int main() {
-  // --- Ghép lười, và cấu trúc đọc được ---
+  // --- Lazy pairing, and readable structure ---
   {
     World w;
     ObjectId x = w.declare("x"), A = w.declare("A"), B = w.declare("B");
@@ -32,7 +32,7 @@ int main() {
     check(w.represent(a) == ra, "gọi lại thì ra đúng đại diện cũ");
   }
 
-  // --- Holds đồng bộ hai chiều ---
+  // --- Holds stays in sync in both directions ---
   {
     World w; Prover p(w);
     ObjectId x = w.declare("x"), A = w.declare("A");
@@ -44,7 +44,7 @@ int main() {
     p.assume(a, 1);
     check(w.toldIn(ra, H), "cất mệnh đề thì đại diện vào Holds");
 
-    // chiều ngược lại
+    // the other direction
     PropId b = w.atom(Term::of(x), Term::of(w.declare("B")), true);
     ObjectId rb = w.represent(b);
     check(!w.holds(b), "B chưa được cất");
@@ -52,7 +52,7 @@ int main() {
     check(w.holds(b), "ghi vào Holds thì mệnh đề được cất theo");
   }
 
-  // --- Đại diện sinh ra sau khi mệnh đề đã có thì bắt kịp ngay ---
+  // --- A representative created after its proposition catches up immediately ---
   {
     World w; Prover p(w);
     ObjectId x = w.declare("x"), A = w.declare("A");
@@ -62,7 +62,7 @@ int main() {
     check(w.toldIn(ra, w.holdsColumn()), "đại diện sinh sau vẫn vào Holds ngay");
   }
 
-  // --- Holds là một ô, nên nó theo scope ---
+  // --- Holds is a cell, so it follows scopes ---
   {
     World w; Prover p(w);
     ObjectId x = w.declare("x"), A = w.declare("A"), B = w.declare("B");
@@ -78,7 +78,7 @@ int main() {
     check(!w.toldIn(ra, H), "ra scope: rụng theo, vì Holds là một ô");
   }
 
-  // --- Luật cổ điển viết trên đại diện, áp một dòng ---
+  // --- A classical rule written over representatives, applied in one line ---
   {
     World w; Prover p(w);
     ObjectId t = w.declare("t"), S = w.declare("S");
@@ -107,7 +107,7 @@ int main() {
     check(w.holds(s), "và S được cất theo — đồng bộ ngược chạy");
   }
 
-  // --- Mệnh đề có lượng từ: đại diện mờ, đủ cho luật coi nó như một hạt ---
+  // --- Quantified propositions: representatives with identity preserved ---
   {
     World w; Prover p(w);
     ObjectId A = w.declare("A");
@@ -123,7 +123,7 @@ int main() {
     PropId other = w.exists("x", w.atom(Term::ofVar(0), Term::of(A), true));
     check(w.represent(other) != r1, "for every và there exists là hai đại diện khác nhau");
 
-    // Có cấu trúc: (All, (Mem, (Var, 0), A))
+    // Structured: (All, (Mem, (Var, 0), A))
     const Object& o = w.obj(r1);
     check(o.kind == Kind::Tuple && o.elems.size() == 2, "đại diện có lượng từ là tuple hai phần");
     check(w.show(o.elems[0]) == "All", "phần đầu là nhãn All");
@@ -131,7 +131,7 @@ int main() {
           "thân đại diện được luôn, biến buộc thành (Var, 0): " + w.show(o.elems[1]));
   }
 
-  // --- Phản chứng với kết luận có lượng từ: chạy được đến cùng ---
+  // --- Proof by contradiction with a quantified conclusion: runs to the end ---
   {
     World w; Prover p(w);
     ObjectId A = w.declare("A"), B = w.declare("B");
@@ -148,8 +148,9 @@ int main() {
     p.assume(w.neg(w.neg(goal)), 2);
 
     ObjectId rg = w.represent(goal);
-    // Ghép lười: phải gọi tên `not (not goal)` như một đối tượng thì đại diện
-    // của nó mới sinh ra, và lúc đó Holds bắt kịp vì mệnh đề đã được cất.
+    // Lazy pairing: `not (not goal)` has to be named as an object before its representative
+    // exists, and at that moment Holds catches up because the proposition is already
+    // stored.
     w.represent(w.neg(w.neg(goal)));
     auto res = w.applyRule(dne, {rg}, "dne", 3);
     check(res.ok && w.holds(goal),

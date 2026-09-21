@@ -14,7 +14,7 @@ struct Rational::Impl {
 
 namespace {
 
-// "0.1" -> 1/10, "-2.75" -> -11/4. Đọc chính xác, không qua dấu phẩy động.
+// "0.1" -> 1/10, "-2.75" -> -11/4. Read exactly, never through floating point.
 void setFromDecimal(mpq_t out, const std::string& text) {
   auto dot = text.find('.');
   std::string digits = text.substr(0, dot) + text.substr(dot + 1);
@@ -106,7 +106,7 @@ std::string Rational::str() const {
   void (*freefn)(void*, size_t);
   mp_get_memory_functions(nullptr, nullptr, &freefn);
   freefn(s, out.size() + 1);
-  // GMP in "3/1" cho số nguyên; bỏ mẫu 1 đi cho gọn.
+  // GMP prints "3/1" for integers; drop the denominator 1 for brevity.
   if (out.size() > 2 && out.compare(out.size() - 2, 2, "/1") == 0)
     out.resize(out.size() - 2);
   return out;

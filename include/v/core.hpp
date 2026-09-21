@@ -10,19 +10,19 @@ namespace v {
 using ObjectId = uint32_t;
 constexpr ObjectId kNoObject = UINT32_MAX;
 
-// Bước: mỗi lần ghi làm số này tăng. Cờ bật ở bước nào thì mang dấu bước đó.
+// Step: every write increments it. A flag raised at a step carries that step's stamp.
 using Step = uint64_t;
 
-// Ba nguồn sinh đối tượng, khác nhau ở danh tính.
-//   Declared — mỗi lần khai báo là một đối tượng mới, không thành phần.
-//   Tuple    — danh tính theo danh sách thành phần.
-//   Numeral  — danh tính theo giá trị.
+// Three sources of objects, differing in identity.
+//   Declared — every declaration is a new object, with no components.
+//   Tuple    — identity by the list of components.
+//   Numeral  — identity by value.
 enum class Kind { Declared, Tuple, Numeral };
 
 struct Object {
   ObjectId id = kNoObject;
   Kind kind = Kind::Declared;
-  std::string name;             // chỉ để in ra, không mang nghĩa
+  std::string name;             // for printing only, carries no meaning
   std::vector<ObjectId> elems;  // Tuple
   Rational value;               // Numeral
 };

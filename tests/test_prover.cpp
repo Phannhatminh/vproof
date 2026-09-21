@@ -12,7 +12,7 @@ static void check(bool ok, const std::string& what) {
 }
 
 int main() {
-  // --- Đưa vào và dùng `and` ---
+  // --- Introducing and eliminating `and` ---
   {
     World w; Prover p(w);
     ObjectId x = w.declare("x"), A = w.declare("A"), B = w.declare("B");
@@ -35,7 +35,7 @@ int main() {
     check(e.ok && w2.holds(c), "một bước mới lấy C ra");
   }
 
-  // --- `or` đưa vào: vế kia chọn tự do ---
+  // --- `or` introduction: the other side is free ---
   {
     World w; Prover p(w);
     ObjectId x = w.declare("x"), A = w.declare("A"), B = w.declare("B");
@@ -47,7 +47,7 @@ int main() {
     check(!w.toldIn(x, B), "và B vẫn chưa ai nói gì");
   }
 
-  // --- `if … then` đưa vào bằng scope ---
+  // --- `if … then` introduction by a scope ---
   {
     World w; Prover p(w);
     ObjectId x = w.declare("x"), A = w.declare("A"), B = w.declare("B"), C = w.declare("C");
@@ -70,7 +70,7 @@ int main() {
     check(!w.holds(a) && !w.holds(b), "giả định và mọi thứ trong scope đã bị gỡ");
   }
 
-  // --- `for every` đưa vào ---
+  // --- `for every` introduction ---
   {
     World w; Prover p(w);
     ObjectId A = w.declare("A"), B = w.declare("B");
@@ -88,7 +88,7 @@ int main() {
     check(w.objectCount() == 2, "đối tượng tạm biến mất, còn A và B");
   }
 
-  // --- `not` đưa vào: chỉ ra vô lý trong scope ---
+  // --- `not` introduction: pointing out an absurdity inside a scope ---
   {
     World w; Prover p(w);
     ObjectId x = w.declare("x"), S = w.declare("S");
@@ -104,7 +104,7 @@ int main() {
     check(w.showProp(r.prop) == "not (x ∈ S)", w.showProp(r.prop));
   }
 
-  // --- `there exists` đưa vào và dùng ---
+  // --- `there exists` introduction and elimination ---
   {
     World w; Prover p(w);
     ObjectId a = w.declare("a"), P = w.declare("P"), Q = w.declare("Q");
@@ -129,7 +129,7 @@ int main() {
     check(r.ok && w.holds(r.prop), "thoát với kết luận không nhắc nhân chứng");
   }
 
-  // --- Ví dụ đầy đủ: P, P→Q∨R, Q→S, R→S ⊢ not (not S) ---
+  // --- Full example: P, P→Q∨R, Q→S, R→S ⊢ not (not S) ---
   {
     World w; Prover p(w);
     ObjectId t = w.declare("t"), SP = w.declare("P"), SQ = w.declare("Q"),
@@ -151,7 +151,7 @@ int main() {
     p.suppose(notS, "ns", 5);
     {
       p.suppose(Q, "q", 6);
-      // dùng `if Q then S`: một luật không có biến, áp với không đối số nào
+      // use `if Q then S`: a rule with no variables, applied to no arguments
       w.applyRule(qs, {}, "qs", 7);
       p.absurd(S, notS, 8);
       auto nq = p.hence(w.neg(Q), "nq", 9);

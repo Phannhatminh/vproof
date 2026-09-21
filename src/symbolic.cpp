@@ -8,9 +8,10 @@ namespace v {
 
 namespace {
 
-// Đơn thức: biến -> số mũ, số mũ luôn dương. Đơn thức rỗng là hằng.
+// Monomial: variable -> exponent, exponents always positive. The empty monomial is the
+// constant.
 using Mono = std::map<ObjectId, int>;
-// Đa thức: đơn thức -> hệ số, hệ số luôn khác 0.
+// Polynomial: monomial -> coefficient, coefficients always non-zero.
 using Poly = std::map<Mono, Rational>;
 
 struct Frac {
@@ -70,7 +71,7 @@ Poly power(const Poly& a, int n) {
   return out;
 }
 
-// Ước đơn thức chung của cả đa thức: số mũ nhỏ nhất ở mỗi biến.
+// Common monomial divisor of the whole polynomial: the smallest exponent of each variable.
 Mono commonMono(const Poly& p) {
   Mono g;
   bool first = true;
@@ -112,7 +113,7 @@ std::vector<ObjectId> varsOf(const Poly& a, const Poly& b) {
   return out;
 }
 
-// --- một biến: hệ số theo bậc, bậc 0 ở đầu ---
+// --- one variable: coefficients by degree, degree 0 first ---
 using Uni = std::vector<Rational>;
 
 Uni toUni(const Poly& p, ObjectId v) {
@@ -139,7 +140,7 @@ Poly fromUni(const Uni& u, ObjectId v) {
   return p;
 }
 
-// Chia có dư; trả false nếu không chia hết.
+// Division with remainder; returns false if it does not divide exactly.
 bool uniDivide(Uni a, const Uni& b, Uni& q, bool wantExact) {
   if (b.empty()) return false;
   q.assign(a.size() >= b.size() ? a.size() - b.size() + 1 : 0, Rational(0));
@@ -168,15 +169,16 @@ Uni uniGcd(Uni a, Uni b) {
     a = b;
     b = r;
   }
-  if (!a.empty()) {  // chuẩn hoá về hệ số đầu bằng 1
+  if (!a.empty()) {  // normalise to leading coefficient 1
     Rational lead = a.back();
     for (Rational& c : a) c = c / lead;
   }
   return a;
 }
 
-// Dạng chuẩn: chia cả tử lẫn mẫu cho hệ số của một đơn thức cố định của mẫu.
-// Triệt hệ số thì an toàn — một số hữu tỉ khác 0 thì khác 0 ở mọi chỗ.
+// Normal form: divide numerator and denominator by the coefficient of a fixed monomial of
+// the denominator. Cancelling coefficients is safe — a non-zero rational is non-zero
+// everywhere.
 void canonical(Frac& f) {
   if (f.den.empty()) throw std::runtime_error("mẫu bằng 0");
   if (f.num.empty()) {
@@ -241,7 +243,7 @@ Frac build(World& w, const Term& t) {
     return divF(a, b);
   }
 
-  // Không phải phép toán: cả term là một biến của đại số. Số thì là hằng.
+  // Not an operation: the whole term is a variable of the algebra. Numbers are constants.
   ObjectId id = w.resolve(t);
   if (w.obj(id).kind == Kind::Numeral)
     return Frac{constant(w.obj(id).value), constant(Rational(1))};
@@ -287,8 +289,8 @@ Term simplify(World& w, const Term& t, std::vector<Term>* nonzero) {
   Frac f = build(w, t);
   canonical(f);
 
-  // Triệt ước chung có chứa biến. Mỗi nhân tử bị bỏ đi phải khác 0, và điều
-  // kiện đó đi ra ngoài chứ không biến mất.
+  // Cancel common factors that contain variables. Every factor removed must be non-zero,
+  // and that condition goes outside instead of disappearing.
   if (nonzero) {
     Mono gn = commonMono(f.num), gd = commonMono(f.den), g;
     for (const auto& [v, e] : gn) {
@@ -305,7 +307,8 @@ Term simplify(World& w, const Term& t, std::vector<Term>* nonzero) {
       canonical(f);
     }
 
-    // Một biến thì chia được hẳn bằng thuật toán Euclid.
+    // With a single variable the fraction can be fully reduced with the Euclidean
+    // algorithm.
     std::vector<ObjectId> vs = varsOf(f.num, f.den);
     if (vs.size() == 1 && f.den.size() > 1) {
       Uni un = toUni(f.num, vs[0]), ud = toUni(f.den, vs[0]);

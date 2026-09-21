@@ -22,9 +22,10 @@ bool Term::operator<(const Term& o) const {
   return false;
 }
 
-// Danh tính của mệnh đề theo cấu trúc, và binderName không tính vào — nó chỉ
-// để in ra. Vì biến buộc lưu theo chỉ số de Bruijn, hai mệnh đề chỉ khác tên
-// biến buộc là cùng một mệnh đề, không cần so sánh riêng.
+// Propositions are identified by structure, and binderName does not count — it is for
+// printing only. Bound variables are stored as de Bruijn indices, so two propositions
+// differing only in bound-variable names are the same proposition, with no separate
+// comparison needed.
 bool Prop::sameShape(const Prop& o) const {
   if (kind != o.kind) return false;
   if (kind == PropKind::Atom)
