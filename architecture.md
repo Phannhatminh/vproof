@@ -199,7 +199,7 @@ về đối tượng ngay lúc parse, mà biến thì chưa có đối tượng.
 Let F be a map.
 Let a be an entity.
 Apply Domain to F.
-Apply F to a.            -- không đi được: chưa xác lập `a in Domain(F)`
+Apply F to a.            -- không đi được: not established: `a in Domain(F)`
 ```
 
 Chỗ này không phá "ghi luôn thành công": thao tác ghi không xảy ra, chứ không phải xảy ra

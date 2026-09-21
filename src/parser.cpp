@@ -90,7 +90,7 @@ Parser::Token Parser::take() {
 }
 
 void Parser::expect(const std::string& t) {
-  if (!at(t)) err("cần `" + t + "`, gặp `" + peek().text + "`");
+  if (!at(t)) err("expected `" + t + "`, got `" + peek().text + "`");
   take();
 }
 
@@ -104,7 +104,7 @@ void Parser::err(const std::string& msg) const { throw ParseError(peek().line, m
 
 ObjectId Parser::lookup(const std::string& name) {
   auto it = names_.find(name);
-  if (it == names_.end()) err("chưa khai báo: " + name);
+  if (it == names_.end()) err("not declared: " + name);
   return it->second;
 }
 
@@ -181,7 +181,7 @@ Term Parser::atomTerm() {
         std::string label = labelOpt();
         expect("]");
         auto it = labels_.find(label);
-        if (it == labels_.end()) err("chưa có nhãn (" + label + ")");
+        if (it == labels_.end()) err("no such label (" + label + ")");
         return Term::of(w_.represent(it->second));
       }
     }
@@ -202,7 +202,7 @@ Term Parser::atomTerm() {
     Token t = take();
     return Term::of(w_.numeral(Rational(t.text)));
   }
-  if (!atWord()) err("cần một term, gặp `" + peek().text + "`");
+  if (!atWord()) err("expected a term, got `" + peek().text + "`");
   Token t = take();
   if (at("(")) {
     // `F(a)` is function application: it points at the object created by an `Apply F to a.`
@@ -212,7 +212,7 @@ Term Parser::atomTerm() {
     expect(")");
     auto it = applied_.find({lookup(t.text), w_.resolve(arg)});
     if (it == applied_.end())
-      err("`" + t.text + "(...)` chưa có — cần `Apply " + t.text + " to ...` trước");
+      err("`" + t.text + "(...)` does not exist yet — needs `Apply " + t.text + " to ...` first");
     return Term::of(it->second);
   }
   // Notation holes are looked up first — they are only open while parsing a right-hand
@@ -299,7 +299,7 @@ PropId Parser::tryNotation() {
   }
   if (ambiguous) {
     pos_ = save;
-    err("nhiều mẫu cùng khớp ở đây; thêm `where` để phân biệt");
+    err("several notations match here; add `where` to tell them apart");
   }
   pos_ = best == kNoProp ? save : bestEnd;
   return best;
@@ -373,7 +373,7 @@ PropId Parser::primary() {
         settled = true;
       }
     }
-    if (!settled) err("sau danh sách biến cần một dấu phẩy rồi tới thân");
+    if (!settled) err("expected a comma and then the body after the variable list");
 
     // The first variable in the list is the outermost binder, so it gets the largest index;
     // the last variable is innermost, index 0.
@@ -425,7 +425,7 @@ PropId Parser::primary() {
   bool positive = true;
   if (accept("in")) positive = true;
   else if (accept("notin")) positive = false;
-  else err("cần `in` hoặc `notin`, gặp `" + peek().text + "`");
+  else err("expected `in` or `notin`, got `" + peek().text + "`");
   Term column = term();
   return w_.atom(std::move(subject), std::move(column), positive);
 }
@@ -499,7 +499,7 @@ Stmt Parser::statement() {
     // already carrying that label. Used for conditions produced by the algebra layer.
     if (accept(".")) {
       auto it = labels_.find(s.label);
-      if (it == labels_.end()) err("chưa có nhãn (" + s.label + ")");
+      if (it == labels_.end()) err("no such label (" + s.label + ")");
       s.prop = it->second;
       return s;
     }
@@ -645,7 +645,7 @@ Stmt Parser::statement() {
   if (at("Notation")) {
     take();
     expect(":");
-    if (peek().text.empty() || peek().text[0] != '"') err("cần mẫu trong nháy kép");
+    if (peek().text.empty() || peek().text[0] != '"') err("expected a template in double quotes");
     std::string tmplText = take().text.substr(1);
 
     Notation n;
@@ -716,7 +716,7 @@ Stmt Parser::statement() {
         size_t idx = holeNames_.size();
         for (size_t i = 0; i < holeNames_.size(); ++i)
           if (holeNames_[i] == hole) idx = i;
-        if (idx == holeNames_.size()) err("`" + hole + "` không phải một lỗ của mẫu");
+        if (idx == holeNames_.size()) err("`" + hole + "` is not a hole of the template");
         n.guards.push_back({idx, set});
       } while (accept(","));
     }
@@ -777,7 +777,7 @@ Stmt Parser::statement() {
     return s;
   }
 
-  err("câu lệnh lạ: `" + peek().text + "`");
+  err("unknown statement: `" + peek().text + "`");
 }
 
 void Parser::beginTokens(std::vector<Token> toks) {

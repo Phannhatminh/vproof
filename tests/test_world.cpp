@@ -22,7 +22,7 @@ int main() {
     World w;
     ObjectId a1 = w.declare("alice");
     ObjectId a2 = w.declare("alice");
-    check(a1 != a2, "hai lần khai báo cùng tên ra hai đối tượng");
+    check(a1 != a2, "declaring the same name twice gives two objects");
   }
 
   // --- Tuples: identity by components; Let t1 = Let t2 = (a,c) gives 3 objects ---
@@ -34,19 +34,19 @@ int main() {
     ObjectId t2 = w.declare("tuple2");
     ObjectId pair1 = w.tuple({alice, carol});
     ObjectId pair2 = w.tuple({alice, carol});
-    check(pair1 == pair2, "cùng thành phần thì cùng tuple");
-    check(t1 != t2 && t1 != pair1 && t2 != pair1, "tuple1, tuple2, (alice,carol) là 3 đối tượng");
-    check(w.objectCount() == 5, "tổng cộng 5 đối tượng: alice, carol, tuple1, tuple2, cặp");
+    check(pair1 == pair2, "same components, same tuple");
+    check(t1 != t2 && t1 != pair1 && t2 != pair1, "tuple1, tuple2, (alice,carol) are 3 objects");
+    check(w.objectCount() == 5, "5 objects in all: alice, carol, tuple1, tuple2, the pair");
   }
 
   // --- Numerals: identity by value, decimals read exactly ---
   {
     World w;
-    check(w.numeral(Rational("0.1")) == w.numeral(Rational(1, 10)), "0.1 là 1/10");
-    check(w.numeral(Rational("2")) == w.numeral(Rational(4, 2)), "4/2 là 2");
-    check(w.obj(w.numeral(Rational(-6, 4))).name == "-3/2", "numeral luôn tối giản");
+    check(w.numeral(Rational("0.1")) == w.numeral(Rational(1, 10)), "0.1 is 1/10");
+    check(w.numeral(Rational("2")) == w.numeral(Rational(4, 2)), "4/2 is 2");
+    check(w.obj(w.numeral(Rational(-6, 4))).name == "-3/2", "numerals are always reduced");
     ObjectId big = w.numeral(Rational("123456789012345678901234567890"));
-    check(w.obj(big).name == "123456789012345678901234567890", "tử mẫu không giới hạn độ lớn");
+    check(w.obj(big).name == "123456789012345678901234567890", "numerator and denominator are unbounded");
   }
 
   // --- Matrix: an empty cell means nobody has spoken; two independent flags; writing
@@ -54,16 +54,16 @@ int main() {
   {
     World w;
     ObjectId x = w.declare("x"), S = w.declare("S");
-    check(!w.toldIn(x, S) && !w.toldOut(x, S), "ô vắng: chưa ai nói gì");
+    check(!w.toldIn(x, S) && !w.toldOut(x, S), "empty cell: nobody has spoken");
 
     w.tellIn(x, S, Reason::stipulate(1));
-    check(w.toldIn(x, S) && !w.toldOut(x, S), "nói ∈ thì chỉ cờ ∈ bật");
+    check(w.toldIn(x, S) && !w.toldOut(x, S), "saying ∈ raises only the ∈ flag");
 
     w.tellOut(x, S, Reason::stipulate(2));
-    check(w.toldIn(x, S) && w.toldOut(x, S), "cả hai cờ cùng bật được, không nổ, không từ chối");
+    check(w.toldIn(x, S) && w.toldOut(x, S), "both flags can be raised: no explosion, no refusal");
 
     check(w.reasons(x, S, true).size() == 1 && w.reasons(x, S, false).size() == 1,
-          "mỗi cực giữ lý do riêng");
+          "each polarity keeps its own reasons");
   }
 
   // --- All reasons are kept, and the step stamp does not change on re-raise ---
@@ -73,8 +73,8 @@ int main() {
     w.tellIn(x, S, Reason::stipulate(1));
     Step first = w.stepOf(x, S, true);
     w.tellIn(x, S, Reason::derive("r", 7));
-    check(w.reasons(x, S, true).size() == 2, "suy ra lại thì thêm lý do, không thay thế");
-    check(w.stepOf(x, S, true) == first, "cờ đã bật thì dấu bước giữ nguyên");
+    check(w.reasons(x, S, true).size() == 2, "deriving again adds a reason, replaces nothing");
+    check(w.stepOf(x, S, true) == first, "an already-raised flag keeps its step stamp");
   }
 
   // --- Journal: rolling back to a mark ---
@@ -89,13 +89,13 @@ int main() {
     w.tellIn(x, T, Reason::stipulate(2));
     w.tellIn(x, S, Reason::derive("r", 3));  // flag already raised before the mark
     // 5 = x, S, T, the Column tag (created on the first write), and w created in the scope.
-    check(w.toldIn(x, T) && w.objectCount() == 5, "trong scope: có thêm đối tượng và ô");
+    check(w.toldIn(x, T) && w.objectCount() == 5, "inside the scope: extra objects and cells");
 
     w.rollback(m);
-    check(!w.toldIn(x, T), "quay về mốc: cờ bật trong scope bị tắt");
-    check(w.objectCount() == 4, "quay về mốc: đối tượng tạo trong scope biến mất");
-    check(w.toldIn(x, S), "cờ bật từ trước scope thì không tắt");
-    check(w.reasons(x, S, true).size() == 1, "chỉ lý do thêm trong scope bị gỡ");
+    check(!w.toldIn(x, T), "rollback: flags raised in the scope are lowered");
+    check(w.objectCount() == 4, "rollback: objects created in the scope are gone");
+    check(w.toldIn(x, S), "flags raised before the scope stay up");
+    check(w.reasons(x, S, true).size() == 1, "only the reasons added in the scope are removed");
   }
 
   // --- Rolling back also removes tuple and numeral interning ---
@@ -106,12 +106,12 @@ int main() {
     ObjectId p = w.tuple({a, b});
     (void)p;
     w.numeral(Rational(5));
-    check(w.objectCount() == 4, "trong scope có tuple và numeral");
+    check(w.objectCount() == 4, "the scope has a tuple and a numeral");
     w.rollback(m);
-    check(w.objectCount() == 2, "quay lại gỡ cả hai");
+    check(w.objectCount() == 2, "rollback removes both");
     ObjectId again = w.tuple({a, b});
     check(w.objectCount() == 3 && w.obj(again).kind == Kind::Tuple,
-          "dựng lại tuple sau khi quay lại thì ra đối tượng mới, bảng intern đã sạch");
+          "rebuilding the tuple after rollback gives a new object; the intern table is clean");
   }
 
   // --- Division by zero is a resource error of the number layer, not a fact ---
@@ -122,7 +122,7 @@ int main() {
     } catch (const RationalDivByZero&) {
       threw = true;
     }
-    check(threw, "chia cho 0 báo lên tầng trên, không tự quy ước giá trị");
+    check(threw, "division by zero is reported upward, no value is made up");
   }
 
   std::cout << (failures ? "\nFAILURES: " : "\nall passed, failures: ") << failures << "\n";

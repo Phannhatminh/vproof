@@ -78,7 +78,7 @@ void World::tell(ObjectId subject, ObjectId column, bool positive, Reason why) {
     c2.in = true;
     c2.inStep = ++step_;
     journal_.push_back({Undo::FlagRaised, kNoObject, {column, col}, true});
-    c2.inReasons.push_back(Reason::derive("dùng làm cột", line));
+    c2.inReasons.push_back(Reason::derive("used as a column", line));
     journal_.push_back({Undo::ReasonAdded, kNoObject, {column, col}, true});
   }
 }
@@ -121,7 +121,7 @@ Step World::stepOf(ObjectId subject, ObjectId column, bool positive) const {
 }
 
 void World::rollback(Mark m) {
-  if (m > journal_.size()) throw std::runtime_error("mốc không hợp lệ");
+  if (m > journal_.size()) throw std::runtime_error("invalid mark");
 
   while (journal_.size() > m) {
     Entry e = journal_.back();
@@ -174,7 +174,7 @@ void World::rollback(Mark m) {
       }
       case Undo::ObjectCreated: {
         const Object& o = objects_.back();
-        if (o.id != e.object) throw std::runtime_error("nhật ký lệch với kho đối tượng");
+        if (o.id != e.object) throw std::runtime_error("journal out of step with the object store");
         if (o.kind == Kind::Tuple) tuples_.erase(o.elems);
         if (o.kind == Kind::Numeral) numerals_.erase(o.value);
         objects_.pop_back();
@@ -266,7 +266,7 @@ ObjectId World::resolve(const Term& t) {
     case TermKind::Obj:
       return t.obj;
     case TermKind::Var:
-      throw std::runtime_error("term còn biến tự do, không quy về đối tượng được");
+      throw std::runtime_error("term still has a free variable and cannot resolve to an object");
     case TermKind::Tuple: {
       std::vector<ObjectId> ids;
       ids.reserve(t.elems.size());
@@ -274,7 +274,7 @@ ObjectId World::resolve(const Term& t) {
       return tuple(ids);
     }
   }
-  throw std::runtime_error("term hỏng");
+  throw std::runtime_error("malformed term");
 }
 
 void World::tell(PropId id, Reason why) {
@@ -398,7 +398,7 @@ Term substTerm(const Term& t, VarId depth, ObjectId with) {
 PropId World::instantiate(PropId binderProp, ObjectId with) {
   const Prop& b = props_[binderProp];
   if (b.kind != PropKind::ForAll && b.kind != PropKind::Exists)
-    throw std::runtime_error("mệnh đề này không có biến buộc để thế");
+    throw std::runtime_error("this proposition has no bound variable to substitute");
 
   std::function<PropId(PropId, VarId)> go = [&](PropId cur, VarId depth) -> PropId {
     const Prop& p = props_[cur];
@@ -414,7 +414,7 @@ PropId World::instantiate(PropId binderProp, ObjectId with) {
       case PropKind::ForAll:  return forAll(p.binderName, go(p.left, depth + 1));
       case PropKind::Exists:  return exists(p.binderName, go(p.left, depth + 1));
     }
-    throw std::runtime_error("mệnh đề hỏng");
+    throw std::runtime_error("malformed proposition");
   };
   return go(b.left, 0);
 }
@@ -424,7 +424,7 @@ namespace {
 Term fillTerm(const Term& t, const std::vector<Term>& args) {
   if (t.kind == TermKind::Var && t.var >= kHole) {
     size_t i = t.var - kHole;
-    if (i >= args.size()) throw std::runtime_error("mẫu thiếu đối số");
+    if (i >= args.size()) throw std::runtime_error("template is missing an argument");
     return args[i];
   }
   if (t.kind != TermKind::Tuple) return t;
@@ -449,9 +449,9 @@ PropId World::fillHoles(PropId templateProp, const std::vector<Term>& args) {
       case PropKind::Not:     return neg(go(p.left));
       case PropKind::ForAll:
       case PropKind::Exists:
-        throw std::runtime_error("mẫu Notation không chứa lượng từ được");
+        throw std::runtime_error("a Notation template cannot contain quantifiers");
     }
-    throw std::runtime_error("mệnh đề hỏng");
+    throw std::runtime_error("malformed proposition");
   };
   return go(templateProp);
 }
@@ -481,7 +481,7 @@ World::StepResult World::applyRule(PropId rule, const std::vector<ObjectId>& arg
   for (ObjectId a : args) {
     const Prop& p = props_[body];
     if (p.kind != PropKind::ForAll)
-      throw std::runtime_error("áp luật với nhiều đối số hơn số biến của luật");
+      throw std::runtime_error("rule applied to more arguments than it has variables");
     binding.emplace_back(p.binderName, a);
     body = instantiate(body, a);
   }
@@ -538,7 +538,7 @@ PropId World::rebuild(const PropTree& t) {
     case PropKind::ForAll:  return forAll(t.binderName, rebuild(t.kids[0]));
     case PropKind::Exists:  return exists(t.binderName, rebuild(t.kids[0]));
   }
-  throw std::runtime_error("mệnh đề hỏng");
+  throw std::runtime_error("malformed proposition");
 }
 
 void World::objectsIn(PropId id, std::vector<ObjectId>& out) const {
@@ -594,7 +594,7 @@ ObjectId World::representTerm(const Term& t) {
       return tuple(ids);
     }
   }
-  throw std::runtime_error("term hỏng");
+  throw std::runtime_error("malformed term");
 }
 
 ObjectId World::represent(PropId id) {

@@ -19,20 +19,20 @@ int main() {
     PropId a = w.atom(Term::of(x), Term::of(A), true);
     PropId b = w.atom(Term::of(x), Term::of(B), true);
 
-    check(!p.introAnd(a, b, 1).ok, "thiếu một vế thì không đưa `and` vào được");
+    check(!p.introAnd(a, b, 1).ok, "`and` cannot be introduced with one side missing");
     p.assume(a, 1);
     p.assume(b, 2);
     auto r = p.introAnd(a, b, 3);
-    check(r.ok && w.holds(r.prop), "có A và B thì đưa `A and B` vào được");
+    check(r.ok && w.holds(r.prop), "with A and B, `A and B` can be introduced");
 
     World w2; Prover p2(w2);
     ObjectId y = w2.declare("y"), C = w2.declare("C"), D = w2.declare("D");
     PropId c = w2.atom(Term::of(y), Term::of(C), true);
     PropId d = w2.atom(Term::of(y), Term::of(D), true);
     p2.assume(w2.conj(c, d), 1);
-    check(!w2.holds(c), "cất `C and D` không tự làm C có");
+    check(!w2.holds(c), "storing `C and D` does not make C hold");
     auto e = p2.elimAnd(w2.conj(c, d), true, 2);
-    check(e.ok && w2.holds(c), "một bước mới lấy C ra");
+    check(e.ok && w2.holds(c), "a step is needed to take C out");
   }
 
   // --- `or` introduction: the other side is free ---
@@ -43,8 +43,8 @@ int main() {
     PropId b = w.atom(Term::of(x), Term::of(B), true);
     p.assume(a, 1);
     auto r = p.introOr(a, b, true, 2);
-    check(r.ok && w.holds(r.prop), "có A thì có A or B");
-    check(!w.toldIn(x, B), "và B vẫn chưa ai nói gì");
+    check(r.ok && w.holds(r.prop), "from A, A or B");
+    check(!w.toldIn(x, B), "and nobody has said anything about B");
   }
 
   // --- `if … then` introduction by a scope ---
@@ -61,13 +61,13 @@ int main() {
 
     p.suppose(a, "h", 2);
     w.applyRule(rule, {x}, "rule", 3);
-    check(w.holds(b), "trong scope: B suy ra được");
+    check(w.holds(b), "inside the scope: B is derivable");
     auto bad = p.hence(w.implies(a, c), "r", 4);
-    check(!bad.ok, "thoát với mệnh đề chưa suy ra được thì không đi được");
+    check(!bad.ok, "exiting with a proposition not yet derived does not go through");
     auto good = p.hence(w.implies(a, b), "r", 4);
-    check(good.ok, "thoát với `if A then B`");
-    check(w.holds(good.prop), "mệnh đề thoát sống sót sau khi quay về mốc");
-    check(!w.holds(a) && !w.holds(b), "giả định và mọi thứ trong scope đã bị gỡ");
+    check(good.ok, "exit with `if A then B`");
+    check(w.holds(good.prop), "the exit proposition survives the rollback");
+    check(!w.holds(a) && !w.holds(b), "the assumption and everything in the scope are removed");
   }
 
   // --- `for every` introduction ---
@@ -84,8 +84,8 @@ int main() {
     PropId stated = w.forAll("x", w.implies(w.atom(Term::ofVar(0), Term::of(A), true),
                                             w.atom(Term::ofVar(0), Term::of(B), true)));
     auto r = p.hence(stated, "subset", 4);
-    check(r.ok, "thoát với `for every x in A, x ∈ B`");
-    check(w.objectCount() == 2, "đối tượng tạm biến mất, còn A và B");
+    check(r.ok, "exit with `for every x in A, x ∈ B`");
+    check(w.objectCount() == 2, "the temporary object is gone, A and B remain");
   }
 
   // --- `not` introduction: pointing out an absurdity inside a scope ---
@@ -98,9 +98,9 @@ int main() {
 
     p.suppose(in, "h", 2);
     auto ab = p.absurd(in, out, 3);
-    check(ab.ok, "ô có cả hai cờ thì chỉ ra vô lý được");
+    check(ab.ok, "a cell with both flags can point out an absurdity");
     auto r = p.hence(w.neg(in), "r", 4);
-    check(r.ok && w.holds(r.prop), "thoát ra `not (x ∈ S)`");
+    check(r.ok && w.holds(r.prop), "exit with `not (x ∈ S)`");
     check(w.showProp(r.prop) == "not (x ∈ S)", w.showProp(r.prop));
   }
 
@@ -112,7 +112,7 @@ int main() {
     p.assume(aP, 1);
     auto ex = p.introExists(aP, a, "z", 2);
     check(ex.ok && w.showProp(ex.prop) == "there exists z such that z ∈ P",
-          "chỉ ra nhân chứng: " + w.showProp(ex.prop));
+          "exhibit a witness: " + w.showProp(ex.prop));
 
     // Rule: for every z, if z ∈ P then z ∈ Q.
     PropId rule = w.forAll("z", w.implies(w.atom(Term::ofVar(0), Term::of(P), true),
@@ -122,11 +122,11 @@ int main() {
     ObjectId witness = p.freshOf();
     w.applyRule(rule, {witness}, "rule", 5);
     PropId bad = w.atom(Term::of(witness), Term::of(Q), true);
-    check(!p.hence(bad, "r", 6).ok, "kết luận nhắc tới nhân chứng thì không thoát được");
+    check(!p.hence(bad, "r", 6).ok, "a conclusion mentioning the witness cannot exit");
     auto exQ = p.introExists(bad, witness, "z", 6);
-    check(exQ.ok, "gói lại thành `there exists z such that z ∈ Q`");
+    check(exQ.ok, "repackaged as `there exists z such that z ∈ Q`");
     auto r = p.hence(exQ.prop, "r", 7);
-    check(r.ok && w.holds(r.prop), "thoát với kết luận không nhắc nhân chứng");
+    check(r.ok && w.holds(r.prop), "exit with a conclusion that does not mention the witness");
   }
 
   // --- Full example: P, P→Q∨R, Q→S, R→S ⊢ not (not S) ---
@@ -155,24 +155,24 @@ int main() {
       w.applyRule(qs, {}, "qs", 7);
       p.absurd(S, notS, 8);
       auto nq = p.hence(w.neg(Q), "nq", 9);
-      check(nq.ok, "nhánh Q: ra not Q");
+      check(nq.ok, "branch Q: not Q");
 
       p.suppose(R, "r", 10);
       w.applyRule(rs, {}, "rs", 11);
       p.absurd(S, notS, 12);
       auto nr = p.hence(w.neg(R), "nr", 13);
-      check(nr.ok, "nhánh R: ra not R");
+      check(nr.ok, "branch R: not R");
 
       w.applyRule(pqr, {}, "pqr", 14);
-      check(w.holds(w.disj(Q, R)), "từ P và P→Q∨R ra Q or R");
+      check(w.holds(w.disj(Q, R)), "from P and P→Q∨R, Q or R");
       auto ab = p.absurdFromOr(w.disj(Q, R), w.neg(Q), w.neg(R), 15);
-      check(ab.ok, "Q or R cộng not Q cộng not R: vô lý");
+      check(ab.ok, "Q or R with not Q and not R: absurd");
     }
     auto nns = p.hence(w.neg(notS), "nns", 16);
-    check(nns.ok && w.holds(nns.prop), "thoát ra not (not S)");
+    check(nns.ok && w.holds(nns.prop), "exit with not (not S)");
     check(w.showProp(nns.prop) == "not (not (t ∈ S))", w.showProp(nns.prop));
-    check(!w.holds(notS) && !w.holds(Q), "mọi thứ trong scope đã bị gỡ");
-    check(w.holds(P) && w.holds(pqr), "bốn giả thiết ngoài scope còn nguyên");
+    check(!w.holds(notS) && !w.holds(Q), "everything in the scope is removed");
+    check(w.holds(P) && w.holds(pqr), "the four assumptions outside the scope are intact");
   }
 
   std::cout << (failures ? "\nFAILURES: " : "\nall passed, failures: ") << failures << "\n";

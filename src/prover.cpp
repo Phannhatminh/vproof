@@ -14,7 +14,7 @@ Prover::Result Prover::fail(const std::string& msg) const {
 Prover::Result Prover::missing(PropId p) const {
   Result r;
   r.missing = p;
-  r.error = "chưa có: " + w_.showProp(p);
+  r.error = "missing: " + w_.showProp(p);
   return r;
 }
 
@@ -64,9 +64,9 @@ Prover::Result Prover::introIff(PropId aToB, PropId bToA, int line) {
   const Prop& f = w_.prop(aToB);
   const Prop& g = w_.prop(bToA);
   if (f.kind != PropKind::Implies || g.kind != PropKind::Implies)
-    return fail("iff cần hai mệnh đề dạng `if … then …`");
+    return fail("iff needs two propositions of the form `if … then …`");
   if (f.left != g.right || f.right != g.left)
-    return fail("hai chiều không khớp nhau");
+    return fail("the two directions do not match");
   if (!w_.holds(aToB)) return missing(aToB);
   if (!w_.holds(bToA)) return missing(bToA);
 
@@ -131,7 +131,7 @@ Prover::Result Prover::introExists(PropId instance, ObjectId witness,
 
 Prover::Result Prover::elimAnd(PropId conjunction, bool takeLeft, int line) {
   const Prop& p = w_.prop(conjunction);
-  if (p.kind != PropKind::And) return fail("không phải mệnh đề `and`");
+  if (p.kind != PropKind::And) return fail("not an `and` proposition");
   if (!w_.holds(conjunction)) return missing(conjunction);
 
   PropId out = takeLeft ? p.left : p.right;
@@ -147,7 +147,7 @@ Prover::Result Prover::elimAnd(PropId conjunction, bool takeLeft, int line) {
 
 Prover::Result Prover::elimIff(PropId equivalence, bool forward, int line) {
   const Prop& p = w_.prop(equivalence);
-  if (p.kind != PropKind::Iff) return fail("không phải mệnh đề `iff`");
+  if (p.kind != PropKind::Iff) return fail("not an `iff` proposition");
   if (!w_.holds(equivalence)) return missing(equivalence);
 
   PropId out = forward ? w_.implies(p.left, p.right) : w_.implies(p.right, p.left);
@@ -174,9 +174,9 @@ Prover::Result Prover::absurd(PropId p, PropId notP, int line) {
   if (a.kind == PropKind::Atom && n.kind == PropKind::Atom)
     oppositeFlags = a.positive != n.positive && a.subject == n.subject && a.column == n.column;
   if (!wrapsIt && !oppositeFlags)
-    return fail("hai mệnh đề này không phủ định nhau");
+    return fail("these two propositions do not negate each other");
 
-  if (scopes_.empty()) return fail("chỉ ra vô lý ngoài mọi scope thì không dựng được gì");
+  if (scopes_.empty()) return fail("an absurdity pointed out outside every scope builds nothing");
   scopes_.back().absurd = true;
   (void)line;
 
@@ -187,7 +187,7 @@ Prover::Result Prover::absurd(PropId p, PropId notP, int line) {
 
 Prover::Result Prover::absurdFromOr(PropId disjunction, PropId notA, PropId notB, int line) {
   const Prop& d = w_.prop(disjunction);
-  if (d.kind != PropKind::Or) return fail("không phải mệnh đề `or`");
+  if (d.kind != PropKind::Or) return fail("not an `or` proposition");
   if (!w_.holds(disjunction)) return missing(disjunction);
 
   auto refutes = [&](PropId no, PropId side) {
@@ -197,12 +197,12 @@ Prover::Result Prover::absurdFromOr(PropId disjunction, PropId notA, PropId notB
     return n.kind == PropKind::Atom && s2.kind == PropKind::Atom &&
            n.positive != s2.positive && n.subject == s2.subject && n.column == s2.column;
   };
-  if (!refutes(notA, d.left)) return fail("mệnh đề thứ hai không phủ định vế trái");
-  if (!refutes(notB, d.right)) return fail("mệnh đề thứ ba không phủ định vế phải");
+  if (!refutes(notA, d.left)) return fail("the second proposition does not negate the left side");
+  if (!refutes(notB, d.right)) return fail("the third proposition does not negate the right side");
   if (!w_.holds(notA)) return missing(notA);
   if (!w_.holds(notB)) return missing(notB);
 
-  if (scopes_.empty()) return fail("chỉ ra vô lý ngoài mọi scope thì không dựng được gì");
+  if (scopes_.empty()) return fail("an absurdity pointed out outside every scope builds nothing");
   scopes_.back().absurd = true;
   (void)line;
 
@@ -261,7 +261,7 @@ Prover::Result Prover::takeIn(const std::string& name, ObjectId set, int line) {
 
 Prover::Result Prover::takeFrom(const std::string& name, PropId existential, int line) {
   const Prop& e = w_.prop(existential);
-  if (e.kind != PropKind::Exists) return fail("không phải mệnh đề `there exists`");
+  if (e.kind != PropKind::Exists) return fail("not a `there exists` proposition");
   if (!w_.holds(existential)) return missing(existential);
 
   Scope s;
@@ -286,7 +286,7 @@ Prover::Result Prover::takeFrom(const std::string& name, PropId existential, int
 }
 
 Prover::Result Prover::hence(PropId stated, const std::string& label, int line) {
-  if (scopes_.empty()) return fail("không có scope nào đang mở");
+  if (scopes_.empty()) return fail("no scope is open");
   Scope s = scopes_.back();
   const Prop& out = w_.prop(stated);
 
@@ -294,26 +294,26 @@ Prover::Result Prover::hence(PropId stated, const std::string& label, int line) 
     case ScopeKind::Suppose: {
       if (s.absurd) {
         if (out.kind != PropKind::Not || out.left != s.assumption)
-          return fail("scope này đã chỉ ra vô lý, nên chỉ thoát ra được `not (giả định)`");
+          return fail("this scope pointed out an absurdity, so it can only exit with `not (assumption)`");
       } else {
         if (out.kind != PropKind::Implies || out.left != s.assumption)
-          return fail("mệnh đề thoát phải là `if <giả định> then …`");
+          return fail("the exit proposition must be `if <assumption> then …`");
         if (!w_.holds(out.right)) return missing(out.right);
       }
       break;
     }
     case ScopeKind::Take: {
-      if (out.kind != PropKind::ForAll) return fail("mệnh đề thoát phải là `for every …`");
+      if (out.kind != PropKind::ForAll) return fail("the exit proposition must be `for every …`");
       PropId inner = w_.instantiate(stated, s.fresh);
       if (!w_.holds(inner)) return missing(inner);
       break;
     }
     case ScopeKind::TakeIn: {
-      if (out.kind != PropKind::ForAll) return fail("mệnh đề thoát phải là `for every …`");
+      if (out.kind != PropKind::ForAll) return fail("the exit proposition must be `for every …`");
       PropId inner = w_.instantiate(stated, s.fresh);
       const Prop& i = w_.prop(inner);
       if (i.kind != PropKind::Implies || i.left != s.membership)
-        return fail("mệnh đề thoát phải là `for every x, if x ∈ S then …`");
+        return fail("the exit proposition must be `for every x, if x ∈ S then …`");
       if (!w_.holds(i.right)) return missing(i.right);
       break;
     }
@@ -322,7 +322,7 @@ Prover::Result Prover::hence(PropId stated, const std::string& label, int line) 
       std::vector<ObjectId> mentioned;
       w_.objectsIn(stated, mentioned);
       if (std::find(mentioned.begin(), mentioned.end(), s.fresh) != mentioned.end())
-        return fail("kết luận nhắc tới nhân chứng `" + s.name + "`, mà nó biến mất khi thoát");
+        return fail("the conclusion mentions the witness `" + s.name + "`, which disappears on exit");
       break;
     }
   }

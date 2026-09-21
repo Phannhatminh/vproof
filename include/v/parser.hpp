@@ -12,7 +12,7 @@ namespace v {
 struct ParseError : std::runtime_error {
   int line;
   ParseError(int line, const std::string& msg)
-      : std::runtime_error("dòng " + std::to_string(line) + ": " + msg), line(line) {}
+      : std::runtime_error("line " + std::to_string(line) + ": " + msg), line(line) {}
 };
 
 // The parser builds propositions straight into World. Surface names live only here: bound

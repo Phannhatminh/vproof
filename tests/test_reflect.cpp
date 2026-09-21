@@ -19,17 +19,17 @@ int main() {
     PropId a = w.atom(Term::of(x), Term::of(A), true);
     PropId b = w.atom(Term::of(x), Term::of(B), true);
     size_t before = w.objectCount();
-    check(w.representedBy(0) == kNoProp, "chưa gọi tên thì chưa có đại diện");
+    check(w.representedBy(0) == kNoProp, "no representative until named");
 
     ObjectId ra = w.represent(a);
-    check(w.objectCount() > before, "gọi tên thì đại diện mới sinh ra");
+    check(w.objectCount() > before, "naming it creates the representative");
     check(w.obj(ra).kind == Kind::Tuple && w.obj(ra).elems.size() == 3,
-          "đại diện nguyên tử là tuple (mem, chủ thể, cột)");
-    check(w.representedBy(ra) == a, "đi ngược được từ đại diện về mệnh đề");
+          "the representative of an atom is the tuple (Mem, subject, column)");
+    check(w.representedBy(ra) == a, "the representative maps back to the proposition");
 
     ObjectId rBoth = w.represent(w.conj(a, b));
-    check(w.obj(rBoth).elems[1] == ra, "đại diện ghép dựng từ đại diện con");
-    check(w.represent(a) == ra, "gọi lại thì ra đúng đại diện cũ");
+    check(w.obj(rBoth).elems[1] == ra, "a compound representative is built from its parts");
+    check(w.represent(a) == ra, "naming it again gives the same representative");
   }
 
   // --- Holds stays in sync in both directions ---
@@ -40,16 +40,16 @@ int main() {
     ObjectId ra = w.represent(a);
     ObjectId H = w.holdsColumn();
 
-    check(!w.toldIn(ra, H), "chưa cất thì đại diện chưa thuộc Holds");
+    check(!w.toldIn(ra, H), "not stored yet, so the representative is not in Holds");
     p.assume(a, 1);
-    check(w.toldIn(ra, H), "cất mệnh đề thì đại diện vào Holds");
+    check(w.toldIn(ra, H), "storing the proposition puts its representative in Holds");
 
     // the other direction
     PropId b = w.atom(Term::of(x), Term::of(w.declare("B")), true);
     ObjectId rb = w.represent(b);
-    check(!w.holds(b), "B chưa được cất");
+    check(!w.holds(b), "B has not been stored");
     w.tellIn(rb, H, Reason::stipulate(2));
-    check(w.holds(b), "ghi vào Holds thì mệnh đề được cất theo");
+    check(w.holds(b), "writing into Holds stores the proposition too");
   }
 
   // --- A representative created after its proposition catches up immediately ---
@@ -59,7 +59,7 @@ int main() {
     PropId a = w.atom(Term::of(x), Term::of(A), true);
     p.assume(a, 1);
     ObjectId ra = w.represent(a);
-    check(w.toldIn(ra, w.holdsColumn()), "đại diện sinh sau vẫn vào Holds ngay");
+    check(w.toldIn(ra, w.holdsColumn()), "a representative created later is in Holds at once");
   }
 
   // --- Holds is a cell, so it follows scopes ---
@@ -72,10 +72,10 @@ int main() {
     ObjectId ra = w.represent(a);
 
     p.suppose(a, "h", 1);
-    check(w.toldIn(ra, H), "trong scope: đại diện của giả định thuộc Holds");
+    check(w.toldIn(ra, H), "inside the scope: the assumption's representative is in Holds");
     p.assume(b, 2);
     p.hence(w.implies(a, b), "r", 3);
-    check(!w.toldIn(ra, H), "ra scope: rụng theo, vì Holds là một ô");
+    check(!w.toldIn(ra, H), "after the scope: it is gone, because Holds is a cell");
   }
 
   // --- A classical rule written over representatives, applied in one line ---
@@ -98,13 +98,13 @@ int main() {
 
     p.assume(nns, 2);
     ObjectId rs = w.represent(s);
-    check(w.toldIn(w.represent(nns), H), "not (not S) vào Holds");
-    check(!w.holds(s), "nhưng S thì chưa");
+    check(w.toldIn(w.represent(nns), H), "not (not S) is in Holds");
+    check(!w.holds(s), "but S is not yet");
 
     auto res = w.applyRule(dne, {rs}, "dne", 3);
-    check(res.ok, "áp luật phủ định kép trên đại diện");
-    check(w.toldIn(rs, H), "kết luận: đại diện của S thuộc Holds");
-    check(w.holds(s), "và S được cất theo — đồng bộ ngược chạy");
+    check(res.ok, "apply double negation over representatives");
+    check(w.toldIn(rs, H), "conclusion: the representative of S is in Holds");
+    check(w.holds(s), "and S is stored too — the reverse sync works");
   }
 
   // --- Quantified propositions: representatives with identity preserved ---
@@ -113,22 +113,22 @@ int main() {
     ObjectId A = w.declare("A");
     PropId all = w.forAll("x", w.atom(Term::ofVar(0), Term::of(A), true));
     ObjectId r1 = w.represent(all);
-    check(r1 != kNoObject, "mệnh đề có lượng từ có đại diện");
-    check(w.representedBy(r1) == all, "đi ngược được");
+    check(r1 != kNoObject, "a quantified proposition has a representative");
+    check(w.representedBy(r1) == all, "it maps back");
 
     PropId same = w.forAll("y", w.atom(Term::ofVar(0), Term::of(A), true));
     check(same == all && w.represent(same) == r1,
-          "chỉ khác tên biến buộc thì cùng một đại diện");
+          "differing only in bound-variable names gives the same representative");
 
     PropId other = w.exists("x", w.atom(Term::ofVar(0), Term::of(A), true));
-    check(w.represent(other) != r1, "for every và there exists là hai đại diện khác nhau");
+    check(w.represent(other) != r1, "for every and there exists are two different representatives");
 
     // Structured: (All, (Mem, (Var, 0), A))
     const Object& o = w.obj(r1);
-    check(o.kind == Kind::Tuple && o.elems.size() == 2, "đại diện có lượng từ là tuple hai phần");
-    check(w.show(o.elems[0]) == "All", "phần đầu là nhãn All");
+    check(o.kind == Kind::Tuple && o.elems.size() == 2, "a quantified representative is a two-part tuple");
+    check(w.show(o.elems[0]) == "All", "the first part is the All tag");
     check(w.show(o.elems[1]) == "(Mem, (Var, 0), A)",
-          "thân đại diện được luôn, biến buộc thành (Var, 0): " + w.show(o.elems[1]));
+          "the body is represented too, with the bound variable as (Var, 0): " + w.show(o.elems[1]));
   }
 
   // --- Proof by contradiction with a quantified conclusion: runs to the end ---
@@ -154,7 +154,7 @@ int main() {
     w.represent(w.neg(w.neg(goal)));
     auto res = w.applyRule(dne, {rg}, "dne", 3);
     check(res.ok && w.holds(goal),
-          "not (not (for every x, ...)) qua (dne) ra được mệnh đề có lượng từ");
+          "not (not (for every x, ...)) through (dne) yields the quantified proposition");
   }
 
   std::cout << (failures ? "\nFAILURES: " : "\nall passed, failures: ") << failures << "\n";

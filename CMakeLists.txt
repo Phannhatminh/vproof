@@ -8,7 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_path(GMP_INCLUDE_DIR gmp.h HINTS /opt/homebrew/include /usr/local/include)
 find_library(GMP_LIBRARY NAMES gmp HINTS /opt/homebrew/lib /usr/local/lib)
 if(NOT GMP_INCLUDE_DIR OR NOT GMP_LIBRARY)
-  message(FATAL_ERROR "cần GMP (brew install gmp)")
+  message(FATAL_ERROR "GMP is required (brew install gmp)")
 endif()
 
 add_library(vruntime

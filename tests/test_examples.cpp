@@ -23,7 +23,7 @@ static void runFile(const std::string& path, int expectedChecks) {
     auto rep = interp.run(slurp(path));
     bool ok = rep.checksFailed == 0 && rep.checksRun == expectedChecks;
     std::cout << (ok ? "ok    " : "FAIL  ") << path << " — " << rep.checksRun
-              << " kiểm tra, " << rep.checksFailed << " sai\n";
+              << " checks, " << rep.checksFailed << " failed\n";
     if (!ok) ++failures;
   } catch (const std::exception& e) {
     std::cout << "FAIL  " << path << " — " << e.what() << "\n";
@@ -36,7 +36,7 @@ static void expectError(const std::string& name, const std::string& source,
   Interp interp;
   try {
     interp.run(source);
-    std::cout << "FAIL  " << name << " — lẽ ra phải hỏng\n";
+    std::cout << "FAIL  " << name << " — should have failed\n";
     ++failures;
   } catch (const std::exception& e) {
     std::string msg = e.what();
@@ -51,7 +51,7 @@ static void expectError(const std::string& name, const std::string& source,
 static void runDocBlocks(const std::string& path) {
   std::string text = slurp(path);
   if (text.empty()) {
-    std::cout << "FAIL  " << path << " — không đọc được\n";
+    std::cout << "FAIL  " << path << " — cannot read\n";
     ++failures;
     return;
   }
@@ -69,16 +69,16 @@ static void runDocBlocks(const std::string& path) {
     try {
       auto rep = interp.run(src);
       bool ok = rep.checksFailed == 0;
-      std::cout << (ok ? "ok    " : "FAIL  ") << path << " khối " << n << " — " << rep.checksRun
-                << " kiểm tra, " << rep.checksFailed << " sai\n";
+      std::cout << (ok ? "ok    " : "FAIL  ") << path << " block " << n << " — " << rep.checksRun
+                << " checks, " << rep.checksFailed << " failed\n";
       if (!ok) ++failures;
     } catch (const std::exception& e) {
-      std::cout << "FAIL  " << path << " khối " << n << " — " << e.what() << "\n";
+      std::cout << "FAIL  " << path << " block " << n << " — " << e.what() << "\n";
       ++failures;
     }
   }
   if (n == 0) {
-    std::cout << "FAIL  " << path << " — không có khối nào\n";
+    std::cout << "FAIL  " << path << " — no blocks found\n";
     ++failures;
   }
 }
@@ -117,18 +117,18 @@ int main(int argc, char** argv) {
         "Therefore alice in SET.\n"
         "Therefore alice notin SET.\n");
     bool ok = rep.checksRun == 2 && rep.checksFailed == 2;
-    std::cout << (ok ? "ok    " : "FAIL  ") << "ô vắng: cả hai cực đều không kiểm được\n";
+    std::cout << (ok ? "ok    " : "FAIL  ") << "empty cell: neither polarity checks\n";
     if (!ok) ++failures;
   }
 
-  expectError("thiếu tiền đề",
+  expectError("missing premise",
               "Let a be an entity.\n"
               "Let A, B be sets.\n"
               "Rule (r): for every x, if x in A then x in B.\n"
               "By rule (r) applied to (a), it follows that a in B.\n",
-              "chưa có: a ∈ A");
+              "missing: a ∈ A");
 
-  expectError("kết luận nhắc tới nhân chứng",
+  expectError("conclusion mentions the witness",
               "Let a be an entity.\n"
               "Let P be a set.\n"
               "Assume (h): a in P.\n"
@@ -136,17 +136,17 @@ int main(int argc, char** argv) {
               "Take w from (ex) {\n"
               "}\n"
               "Hence (r): w in P.\n",
-              "nhắc tới nhân chứng");
+              "mentions the witness");
 
-  expectError("kết luận viết ra không khớp",
+  expectError("stated conclusion does not match",
               "Let a be an entity.\n"
               "Let A, B, C be sets.\n"
               "Rule (r): for every x, if x in A then x in B.\n"
               "Assume (h): a in A.\n"
               "By rule (r) applied to (a), it follows that a in C.\n",
-              "không khớp");
+              "does not match");
 
-  expectError("nhãn trong scope không rò ra ngoài",
+  expectError("labels inside a scope do not leak out",
               "Let a be an entity.\n"
               "Let A, B be sets.\n"
               "Assume (h): a in A.\n"
@@ -155,9 +155,9 @@ int main(int argc, char** argv) {
               "}\n"
               "Hence (r): if a in B then a in A and a in B.\n"
               "From (both), it follows that a in A.\n",
-              "chưa có nhãn (both)");
+              "no such label (both)");
 
-  expectError("tên đối tượng tạm không rò ra ngoài",
+  expectError("temporary object names do not leak out",
               "Let A, B be sets.\n"
               "Rule (ab): for every x, if x in A then x in B.\n"
               "Take u with u in A {\n"
@@ -165,52 +165,52 @@ int main(int argc, char** argv) {
               "}\n"
               "Hence (ac): for every x, if x in A then x in B.\n"
               "Assume (bad): u in A.\n",
-              "chưa khai báo: u");
+              "not declared: u");
 
-  expectError("F(a) trước khi có bước áp",
+  expectError("F(a) before the application step",
               "Let F be a map.\n"
               "Let a be an entity.\n"
               "Let P be a set.\n"
               "Apply Domain to F.\n"
               "Assume (h): a in Domain(F).\n"
               "Assume (p): F(a) in P.\n",
-              "chưa có — cần `Apply F to");
+              "does not exist yet — needs `Apply F to");
 
-  expectError("áp hàm khi chưa xác lập đối số thuộc miền",
+  expectError("applying a function before the argument is known to be in the domain",
               "Let F be a map.\n"
               "Let a be an entity.\n"
               "Apply Domain to F.\n"
               "Apply F to a.\n",
-              "chưa xác lập `a in Domain(F)`");
+              "not established: `a in Domain(F)`");
 
-  expectError("ChildOf không thuộc MAP nên ChildOf(lan) không hình thành",
+  expectError("ChildOf is not in MAP, so ChildOf(lan) does not form",
               "Let ChildOf be a relation.\n"
               "Let lan be an entity.\n"
               "Apply Domain to ChildOf.\n",
-              "chưa xác lập `ChildOf in MAP`");
+              "not established: `ChildOf in MAP`");
 
   // Without the condition established, the conditional rule does not go through.
-  expectError("triệt ước mà chưa xác lập điều kiện",
+  expectError("cancelling without the condition established",
               "Let x be an entity.\n"
               "Rule (r): for every u, v, k,\n"
               "    if (u, v, k) in SimplifiedIf and k in Holds then (u, v) in Eq.\n"
               "Simplify x / x.\n"
               "By rule (r) applied to (x/x, 1, [(x, 0) notin Eq]),\n"
               "    it follows that (x/x, 1) in Eq.\n",
-              "chưa có");
+              "missing");
 
   // The hygiene bug of v0.3: a rule variable with the same name as a name on the notation's
   // right-hand side captured it. Here the right-hand side is resolved to objects at
   // declaration, so the use site looks up no names at all.
-  expectError("hai mẫu cùng khớp mà không phân biệt được",
+  expectError("two notations match and cannot be told apart",
               "Let R, S be relations.\n"
               "Let a, b be entities.\n"
               "Notation: \"A near B\" means (A, B) in R.\n"
               "Notation: \"A near B\" means (A, B) in S.\n"
               "Assume (h): a near b.\n",
-              "nhiều mẫu cùng khớp");
+              "several notations match");
 
-  expectError("notation không bị bắt biến",
+  expectError("notation does not capture variables",
               "Let Boss, Mentor be relations.\n"
               "Let alice, bob be entities.\n"
               "Notation: \"A manages B\" means (A, B) in Boss.\n"
@@ -219,26 +219,26 @@ int main(int argc, char** argv) {
               "Assume (h): (alice, bob) in Mentor.\n"
               "By rule (cap) applied to (Mentor, alice, bob),\n"
               "    it follows that (alice, bob) in Mentor.\n",
-              "không khớp");
+              "does not match");
 
-  expectError("lỗi trong thân lý thuyết báo đúng dòng gốc",
+  expectError("errors inside a theory body report the original line",
               "Theory Broken {\n"
               "    Let Carrier be a set.\n"
               "    Assume (bad): zzz in Carrier.\n"
               "}\n"
               "Let A be a set.\n"
               "Import Broken as B with (Carrier := A).\n",
-              "dòng 3");
+              "line 3");
 
-  expectError("chia cho 0 ở tầng đại số",
+  expectError("division by zero in the algebra layer",
               "Let x be an entity.\n"
               "Simplify x / 0.\n",
-              "không rút gọn được");
+              "cannot simplify");
 
-  expectError("tên chưa khai báo",
+  expectError("undeclared name",
               "Let A be a set.\n"
               "Assume (h): zz in A.\n",
-              "chưa khai báo");
+              "not declared");
 
   std::cout << (failures ? "\nFAILURES: " : "\nall passed, failures: ") << failures << "\n";
   return failures ? 1 : 0;

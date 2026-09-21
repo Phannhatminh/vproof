@@ -13,6 +13,6 @@ By rule (relation is set) applied to (Boss), it follows that Boss in SET.
 Therefore Boss in SET.
 
 -- Nothing more is said about alice. The cell (alice, SET) is one nobody has spoken about —
--- not "false", just unknown. `Therefore alice in SET.` reports SAI, and so does `Therefore
+-- not "false", just unknown. `Therefore alice in SET.` reports FAIL, and so does `Therefore
 -- alice notin SET.`
 Why A in SET.

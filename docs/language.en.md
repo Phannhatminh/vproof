@@ -230,7 +230,7 @@ Therefore A.
 Why A.
 ```
 
-`Therefore` prints `ok` if the proposition holds and `SAI` (wrong) if not — and "does not hold"
+`Therefore` prints `ok` if the proposition holds and `FAIL` if not — and "does not hold"
 means nobody has said it, not that it is false. `Why` prints the reason tree: every node is
 either *stipulated at line n* or *derived by which rule, at which line, with which bindings,
 from which premises*.
@@ -396,15 +396,13 @@ and the rules `(relation is set)`, `(map is relation)`, `(eq refl)`, `(eq symm)`
 
 ## When a step does not go through
 
-Error messages are in Vietnamese.
-
 | message | meaning |
 |---|---|
-| `bước không đi được, chưa có: …` | a premise has not been established |
-| `kết luận viết ra không khớp: luật cho …` | the rule yields a different proposition from the one written |
-| `chưa khai báo: x` | the name does not exist, or vanished when its scope closed |
-| `chưa có nhãn (h)` | the label does not exist, or belongs to a closed scope |
-| `kết luận nhắc tới nhân chứng …` | the conclusion leaving `Take … from` still mentions the witness |
-| `` `F(...)` chưa có `` | `F(a)` used before `Apply F to a.` |
-| `chưa xác lập a in Domain(F)` | applying a function before the argument is known to be in its domain |
-| `nhiều mẫu cùng khớp ở đây` | two notations cannot be told apart |
+| `step does not go through, missing: …` | a premise has not been established |
+| `stated conclusion does not match: the rule gives …` | the rule yields a different proposition from the one written |
+| `not declared: x` | the name does not exist, or vanished when its scope closed |
+| `no such label (h)` | the label does not exist, or belongs to a closed scope |
+| `the conclusion mentions the witness …` | the conclusion leaving `Take … from` still mentions the witness |
+| `` `F(...)` does not exist yet `` | `F(a)` used before `Apply F to a.` |
+| `not established: a in Domain(F)` | applying a function before the argument is known to be in its domain |
+| `several notations match here` | two notations cannot be told apart |

@@ -20,7 +20,7 @@ void setFromDecimal(mpq_t out, const std::string& text) {
   std::string digits = text.substr(0, dot) + text.substr(dot + 1);
   std::string den = "1" + std::string(text.size() - dot - 1, '0');
   if (mpq_set_str(out, (digits + "/" + den).c_str(), 10) != 0)
-    throw std::runtime_error("numeral không đọc được: " + text);
+    throw std::runtime_error("unreadable numeral: " + text);
   mpq_canonicalize(out);
 }
 
@@ -43,7 +43,7 @@ Rational::Rational(const std::string& text) : p_(new Impl) {
     return;
   }
   if (mpq_set_str(p_->q, text.c_str(), 10) != 0)
-    throw std::runtime_error("numeral không đọc được: " + text);
+    throw std::runtime_error("unreadable numeral: " + text);
   if (mpz_sgn(mpq_denref(p_->q)) == 0) throw RationalDivByZero{};
   mpq_canonicalize(p_->q);
 }

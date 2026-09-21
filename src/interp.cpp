@@ -9,7 +9,7 @@ namespace v {
 
 PropId Interp::ref(const std::string& label, int line) const {
   auto it = labels_.find(label);
-  if (it == labels_.end()) throw ParseError(line, "chưa có nhãn (" + label + ")");
+  if (it == labels_.end()) throw ParseError(line, "no such label (" + label + ")");
   return it->second;
 }
 
@@ -23,15 +23,15 @@ void Interp::whyChain(PropId p, int depth, Report& rep) const {
   std::string pad(depth * 2 + 2, ' ');
   const auto& rs = w_.propReasons(p);
   if (rs.empty()) {
-    rep.lines.push_back(pad + "(chưa có lý do)");
+    rep.lines.push_back(pad + "(no reason recorded)");
     return;
   }
   for (const Reason& r : rs) {
     if (r.stipulated) {
-      rep.lines.push_back(pad + "đặt ra ở dòng " + std::to_string(r.line));
+      rep.lines.push_back(pad + "stipulated at line " + std::to_string(r.line));
       continue;
     }
-    std::string head = pad + "suy ra bằng " + r.rule + ", dòng " + std::to_string(r.line);
+    std::string head = pad + "derived by " + r.rule + ", line " + std::to_string(r.line);
     if (!r.binding.empty()) {
       head += " [";
       for (size_t i = 0; i < r.binding.size(); ++i)
@@ -41,7 +41,7 @@ void Interp::whyChain(PropId p, int depth, Report& rep) const {
     rep.lines.push_back(head);
     if (depth < 6)
       for (const Antecedent& a : r.antecedents) {
-        rep.lines.push_back(pad + "  vì " + w_.showProp(a.prop));
+        rep.lines.push_back(pad + "  because " + w_.showProp(a.prop));
         whyChain(a.prop, depth + 2, rep);
       }
   }
@@ -83,11 +83,11 @@ Rational Interp::evalExpr(const Term& t, int line) {
   if (t.kind == TermKind::Obj) {
     const Object& o = w_.obj(t.obj);
     if (o.kind != Kind::Numeral)
-      throw ParseError(line, "không phải số: " + o.name);
+      throw ParseError(line, "not a number: " + o.name);
     return o.value;
   }
   if (t.kind != TermKind::Tuple || t.elems.size() != 3 || t.elems[0].kind != TermKind::Obj)
-    throw ParseError(line, "không phải biểu thức số");
+    throw ParseError(line, "not a numeric expression");
 
   const std::string& op = w_.obj(t.elems[0].obj).name;
   Rational a = evalExpr(t.elems[1], line), b = evalExpr(t.elems[2], line);
@@ -95,7 +95,7 @@ Rational Interp::evalExpr(const Term& t, int line) {
   if (op == "Minus") return a - b;
   if (op == "Times") return a * b;
   if (op == "Div") return a / b;  // throws RationalDivByZero, caught by the caller
-  throw ParseError(line, "phép toán lạ: " + op);
+  throw ParseError(line, "unknown operation: " + op);
 }
 
 void Interp::exec(const Stmt& s, Report& rep) {
@@ -105,7 +105,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
         std::vector<Term> elems;
         for (const std::string& e : s.tupleElems) {
           auto it = names_.find(e);
-          if (it == names_.end()) throw ParseError(s.line, "chưa khai báo: " + e);
+          if (it == names_.end()) throw ParseError(s.line, "not declared: " + e);
           elems.push_back(Term::of(it->second));
         }
         ObjectId t = w_.declare(s.names[0]);
@@ -143,9 +143,9 @@ void Interp::exec(const Stmt& s, Report& rep) {
       for (const Term& a : s.args) args.push_back(w_.resolve(a));
       auto r = w_.applyRule(rule, args, s.refs[0], s.line);
       if (!r.ok)
-        throw ParseError(s.line, "bước không đi được, chưa có: " + w_.showProp(r.missing));
+        throw ParseError(s.line, "step does not go through, missing: " + w_.showProp(r.missing));
       if (r.conclusion != s.prop)
-        throw ParseError(s.line, "kết luận viết ra không khớp: luật cho `" +
+        throw ParseError(s.line, "stated conclusion does not match: the rule gives `" +
                                      w_.showProp(r.conclusion) + "`");
       bind(s.label, s.prop);
       return;
@@ -176,18 +176,18 @@ void Interp::exec(const Stmt& s, Report& rep) {
         // object, and all those places must hold the same object. Lookup, not trial.
         ObjectId witness = kNoObject;
         if (!matchWitness(ps[0], out.left, 0, witness) || witness == kNoObject)
-          throw ParseError(s.line, "không đọc được nhân chứng từ tiền đề");
+          throw ParseError(s.line, "cannot read a witness off the premise");
         res = pv_.introExists(ps[0], witness, out.binderName, s.line);
       } else {
-        throw ParseError(s.line, "không nhận ra bước này");
+        throw ParseError(s.line, "unrecognised step");
       }
 
       if (!res.ok)
         throw ParseError(s.line, res.missing != kNoProp
-                                     ? "chưa có: " + w_.showProp(res.missing)
+                                     ? "missing: " + w_.showProp(res.missing)
                                      : res.error);
       if (res.prop != s.prop)
-        throw ParseError(s.line, "kết luận không khớp: bước cho `" + w_.showProp(res.prop) + "`");
+        throw ParseError(s.line, "conclusion does not match: the step gives `" + w_.showProp(res.prop) + "`");
       bind(s.label, s.prop);
       return;
     }
@@ -209,7 +209,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
 
     case StmtKind::TakeIn: {
       auto it = names_.find(s.setName);
-      if (it == names_.end()) throw ParseError(s.line, "chưa khai báo: " + s.setName);
+      if (it == names_.end()) throw ParseError(s.line, "not declared: " + s.setName);
       pv_.takeIn(s.names[0], it->second, s.line);
       frames_.push_back({});
       names_[s.names[0]] = pv_.freshOf();
@@ -233,7 +233,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
       auto r = pv_.hence(s.prop, s.label, s.line);
       if (!r.ok)
         throw ParseError(s.line, r.missing != kNoProp
-                                     ? "chưa có: " + w_.showProp(r.missing)
+                                     ? "missing: " + w_.showProp(r.missing)
                                      : r.error);
       if (!frames_.empty()) {
         for (const std::string& l : frames_.back().labels) labels_.erase(l);
@@ -250,7 +250,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
       Prover::Result r;
       if (ps.size() == 2) r = pv_.absurd(ps[0], ps[1], s.line);
       else if (ps.size() == 3) r = pv_.absurdFromOr(ps[0], ps[1], ps[2], s.line);
-      else throw ParseError(s.line, "Absurd cần hai hoặc ba mệnh đề");
+      else throw ParseError(s.line, "Absurd needs two or three propositions");
       if (!r.ok) throw ParseError(s.line, r.error);
       return;
     }
@@ -263,7 +263,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
         // is where the chain is cut — `Apply Domain to Domain as MAP.` is of the same kind
         // as `SET ∈ SET`.
         auto it = names_.find(s.names[0]);
-        if (it == names_.end()) throw ParseError(s.line, "chưa khai báo: " + s.names[0]);
+        if (it == names_.end()) throw ParseError(s.line, "not declared: " + s.names[0]);
         applied_[{F, a}] = it->second;
         w_.tellIn(w_.tuple({a, it->second}), F, Reason::stipulate(s.line));
         return;
@@ -274,22 +274,22 @@ void Interp::exec(const Stmt& s, Report& rep) {
       // an ordinary cell lookup. The domain is itself the result of another application.
       // `Domain` is a name declared by the prelude, not a mechanism tag.
       auto domIt = names_.find("Domain");
-      if (domIt == names_.end()) throw ParseError(s.line, "chưa có `Domain`");
+      if (domIt == names_.end()) throw ParseError(s.line, "`Domain` is not defined");
       auto d = applied_.find({domIt->second, F});
       if (d == applied_.end())
-        throw ParseError(s.line, "chưa có Domain(" + w_.show(F) + ") — cần `Apply Domain to " +
-                                     w_.show(F) + ".` trước");
+        throw ParseError(s.line, "Domain(" + w_.show(F) + ") does not exist yet — needs `Apply Domain to " +
+                                     w_.show(F) + ".` first");
       if (!w_.toldIn(a, d->second))
-        throw ParseError(s.line, "chưa xác lập `" + w_.show(a) + " in " + w_.show(d->second) + "`");
+        throw ParseError(s.line, "not established: `" + w_.show(a) + " in " + w_.show(d->second) + "`");
 
       auto have = applied_.find({F, a});
       if (have != applied_.end()) return;  // canonical value already exists
 
       ObjectId value = w_.declare(w_.show(F) + "(" + w_.show(a) + ")");
       applied_[{F, a}] = value;
-      Reason why = Reason::derive("áp hàm", s.line);
+      Reason why = Reason::derive("application", s.line);
       w_.tellIn(w_.tuple({a, value}), F, std::move(why));
-      rep.lines.push_back("  áp    dòng " + std::to_string(s.line) + ": " + w_.show(value));
+      rep.lines.push_back("  appl line " + std::to_string(s.line) + ": " + w_.show(value));
       return;
     }
 
@@ -300,7 +300,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
 
     case StmtKind::Import: {
       auto it = theories_.find(s.names[0]);
-      if (it == theories_.end()) throw ParseError(s.line, "chưa có lý thuyết " + s.names[0]);
+      if (it == theories_.end()) throw ParseError(s.line, "no such theory: " + s.names[0]);
       const Stmt& th = it->second;
 
       // Instance identity: theory name plus mapping. Re-importing is a no-op.
@@ -365,7 +365,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
       PropId all = ref(s.refs[0], s.line);
       const Prop& p = w_.prop(all);
       if (p.kind != PropKind::ForAll && p.kind != PropKind::Exists)
-        throw ParseError(s.line, "cần một mệnh đề có lượng từ");
+        throw ParseError(s.line, "needs a quantified proposition");
       ObjectId t = w_.resolve(s.expr);
 
       // Substitution on representatives is not reimplemented: it decodes, uses the very
@@ -373,16 +373,16 @@ void Interp::exec(const Stmt& s, Report& rep) {
       // substitutions cannot drift apart.
       PropId inst = w_.instantiate(all, t);
       w_.tellIn(w_.tuple({w_.represent(all), t, w_.represent(inst)}), w_.tag("Instance"),
-                Reason::derive("thể hiện", s.line));
+                Reason::derive("instance", s.line));
       bind(s.label, inst);
-      rep.lines.push_back("  thể   dòng " + std::to_string(s.line) + ": " + w_.showProp(all) +
-                          "  tại " + w_.show(t) + "  ->  " + w_.showProp(inst));
+      rep.lines.push_back("  inst line " + std::to_string(s.line) + ": " + w_.showProp(all) +
+                          "  at " + w_.show(t) + "  ->  " + w_.showProp(inst));
       return;
     }
 
     case StmtKind::Expand: {
       if (s.expr.kind != TermKind::Tuple)
-        throw ParseError(s.line, "Expand cần một dãy liệt kê");
+        throw ParseError(s.line, "Expand needs a listed sequence");
       ObjectId listed = w_.resolve(s.expr);
 
       // The canonical form of a sequence is the function form: a set of (index, element)
@@ -394,10 +394,10 @@ void Interp::exec(const Stmt& s, Report& rep) {
       for (size_t i = 0; i < s.expr.elems.size(); ++i) {
         ObjectId idx = w_.numeral(Rational(static_cast<long long>(i + 1)));
         ObjectId elem = w_.resolve(s.expr.elems[i]);
-        w_.tellIn(w_.tuple({idx, elem}), fn, Reason::derive("khai triển", s.line));
+        w_.tellIn(w_.tuple({idx, elem}), fn, Reason::derive("expansion", s.line));
       }
-      w_.tellIn(w_.tuple({listed, fn}), w_.tag("Expanded"), Reason::derive("khai triển", s.line));
-      rep.lines.push_back("  khai  dòng " + std::to_string(s.line) + ": " + w_.show(listed) +
+      w_.tellIn(w_.tuple({listed, fn}), w_.tag("Expanded"), Reason::derive("expansion", s.line));
+      rep.lines.push_back("  expd line " + std::to_string(s.line) + ": " + w_.show(listed) +
                           "  ->  " + name);
       return;
     }
@@ -409,16 +409,16 @@ void Interp::exec(const Stmt& s, Report& rep) {
       try {
         result = w_.resolve(simplify(w_, s.expr, &nonzero));
       } catch (const std::exception& e) {
-        throw ParseError(s.line, std::string("không rút gọn được: ") + e.what());
+        throw ParseError(s.line, std::string("cannot simplify: ") + e.what());
       }
 
-      std::string shown = "  gọn  dòng " + std::to_string(s.line) + ": " + w_.show(expr) +
+      std::string shown = "  simp line " + std::to_string(s.line) + ": " + w_.show(expr) +
                           "  ->  " + w_.show(result);
       if (nonzero.empty()) {
         // Nothing containing a variable was cancelled, so the equality carries no
         // condition.
         w_.tellIn(w_.tuple({expr, result}), w_.tag("Simplified"),
-                  Reason::derive("đại số", s.line));
+                  Reason::derive("algebra", s.line));
       } else {
         // Something was cancelled: the condition goes outside as a proposition that has to
         // be established, instead of hiding inside the equality.
@@ -429,8 +429,8 @@ void Interp::exec(const Stmt& s, Report& rep) {
           cond = cond == kNoProp ? one : w_.conj(cond, one);
         }
         w_.tellIn(w_.tuple({expr, result, w_.represent(cond)}), w_.tag("SimplifiedIf"),
-                  Reason::derive("đại số", s.line));
-        shown += "   với điều kiện  " + w_.showProp(cond);
+                  Reason::derive("algebra", s.line));
+        shown += "   provided  " + w_.showProp(cond);
         // Lets the condition be referred to by label instead of copied by hand.
         bind(s.label, cond);
       }
@@ -450,10 +450,10 @@ void Interp::exec(const Stmt& s, Report& rep) {
         bool truth = strict ? lo < hi : lo <= hi;
         ObjectId pair = w_.tuple({w_.numeral(lo), w_.numeral(hi)});
         ObjectId rel = w_.tag(strict ? "Less" : "LessEq");
-        Reason why = Reason::derive("máy tính ra", s.line);
+        Reason why = Reason::derive("machine-computed", s.line);
         if (truth) w_.tellIn(pair, rel, std::move(why));
         else w_.tellOut(pair, rel, std::move(why));
-        rep.lines.push_back("  tính  dòng " + std::to_string(s.line) + ": " + w_.show(pair) +
+        rep.lines.push_back("  calc line " + std::to_string(s.line) + ": " + w_.show(pair) +
                             (truth ? " ∈ " : " ∉ ") + w_.show(rel));
         return;
       }
@@ -465,14 +465,14 @@ void Interp::exec(const Stmt& s, Report& rep) {
         ObjectId result = w_.numeral(value);
         ObjectId error = w_.numeral(Rational(0));
         w_.tellIn(w_.tuple({expr, result, error}), w_.tag("Computed"),
-                  Reason::derive("máy tính ra", s.line));
-        rep.lines.push_back("  tính  dòng " + std::to_string(s.line) + ": " + w_.show(expr) +
-                            " = " + w_.show(result) + " (sai số " + w_.show(error) + ")");
+                  Reason::derive("machine-computed", s.line));
+        rep.lines.push_back("  calc line " + std::to_string(s.line) + ": " + w_.show(expr) +
+                            " = " + w_.show(result) + " (error " + w_.show(error) + ")");
       } catch (const RationalDivByZero&) {
         // No error, no conventional value: record a fact in a mechanism relation.
-        w_.tellIn(expr, w_.tag("NoValue"), Reason::derive("chia cho 0", s.line));
-        rep.lines.push_back("  tính  dòng " + std::to_string(s.line) + ": " + w_.show(expr) +
-                            " không có giá trị");
+        w_.tellIn(expr, w_.tag("NoValue"), Reason::derive("division by zero", s.line));
+        rep.lines.push_back("  calc line " + std::to_string(s.line) + ": " + w_.show(expr) +
+                            " has no value");
       }
       return;
     }
@@ -481,13 +481,13 @@ void Interp::exec(const Stmt& s, Report& rep) {
       ++rep.checksRun;
       bool ok = w_.holds(s.prop);
       if (!ok) ++rep.checksFailed;
-      rep.lines.push_back(std::string(ok ? "  ok   " : "  SAI  ") + "dòng " +
+      rep.lines.push_back(std::string(ok ? "  ok   " : "  FAIL ") + "line " +
                           std::to_string(s.line) + ": " + w_.showProp(s.prop));
       return;
     }
 
     case StmtKind::Why: {
-      rep.lines.push_back("  vì sao " + w_.showProp(s.prop) + ":");
+      rep.lines.push_back("  why " + w_.showProp(s.prop) + ":");
       whyChain(s.prop, 0, rep);
       return;
     }

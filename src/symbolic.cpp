@@ -180,7 +180,7 @@ Uni uniGcd(Uni a, Uni b) {
 // the denominator. Cancelling coefficients is safe — a non-zero rational is non-zero
 // everywhere.
 void canonical(Frac& f) {
-  if (f.den.empty()) throw std::runtime_error("mẫu bằng 0");
+  if (f.den.empty()) throw std::runtime_error("denominator is 0");
   if (f.num.empty()) {
     f.den = constant(Rational(1));
     return;
@@ -206,7 +206,7 @@ Frac mulF(const Frac& a, const Frac& b) {
 }
 
 Frac divF(const Frac& a, const Frac& b) {
-  if (b.num.empty()) throw std::runtime_error("chia cho 0");
+  if (b.num.empty()) throw std::runtime_error("division by zero");
   Frac r{mul(a.num, b.den), mul(a.den, b.num)};
   canonical(r);
   return r;
@@ -227,11 +227,11 @@ Frac build(World& w, const Term& t) {
       Frac base = build(w, t.elems[1]);
       const Term& e = t.elems[2];
       if (e.kind != TermKind::Obj || w.obj(e.obj).kind != Kind::Numeral)
-        throw std::runtime_error("số mũ phải là một số nguyên không âm");
+        throw std::runtime_error("the exponent must be a non-negative integer");
       Rational v = w.obj(e.obj).value;
       int n = 0;
       while (Rational(n) < v) ++n;
-      if (!(Rational(n) == v)) throw std::runtime_error("số mũ phải là một số nguyên không âm");
+      if (!(Rational(n) == v)) throw std::runtime_error("the exponent must be a non-negative integer");
       Frac r{power(base.num, n), power(base.den, n)};
       canonical(r);
       return r;

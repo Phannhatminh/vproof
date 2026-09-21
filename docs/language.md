@@ -227,7 +227,7 @@ Therefore A.
 Why A.
 ```
 
-`Therefore` in `ok` nếu mệnh đề đang có, `SAI` nếu không — và "không có" nghĩa là chưa ai nói,
+`Therefore` in `ok` nếu mệnh đề đang có, `FAIL` nếu không — và "không có" nghĩa là chưa ai nói,
 không nghĩa là sai. `Why` in cây lý do: mỗi nút là *đặt ra ở dòng n* hoặc *suy ra bằng luật
 nào, dòng nào, thế gì, từ những tiền đề nào*.
 
@@ -391,11 +391,11 @@ và các luật `(relation is set)`, `(map is relation)`, `(eq refl)`, `(eq symm
 
 | thông báo | nghĩa |
 |---|---|
-| `bước không đi được, chưa có: …` | một tiền đề chưa được xác lập |
-| `kết luận viết ra không khớp: luật cho …` | luật cho ra một mệnh đề khác cái bạn viết |
-| `chưa khai báo: x` | tên chưa có, hoặc đã biến mất khi scope đóng |
-| `chưa có nhãn (h)` | nhãn chưa có, hoặc thuộc về một scope đã đóng |
-| `kết luận nhắc tới nhân chứng …` | kết luận thoát `Take … from` còn chứa nhân chứng |
-| `` `F(...)` chưa có `` | nhắc `F(a)` trước khi có `Apply F to a.` |
-| `chưa xác lập a in Domain(F)` | áp hàm khi chưa biết đối số thuộc miền |
-| `nhiều mẫu cùng khớp ở đây` | hai notation không phân biệt được |
+| `step does not go through, missing: …` | một tiền đề chưa được xác lập |
+| `stated conclusion does not match: the rule gives …` | luật cho ra một mệnh đề khác cái bạn viết |
+| `not declared: x` | tên chưa có, hoặc đã biến mất khi scope đóng |
+| `no such label (h)` | nhãn chưa có, hoặc thuộc về một scope đã đóng |
+| `the conclusion mentions the witness …` | kết luận thoát `Take … from` còn chứa nhân chứng |
+| `` `F(...)` does not exist yet `` | nhắc `F(a)` trước khi có `Apply F to a.` |
+| `not established: a in Domain(F)` | áp hàm khi chưa biết đối số thuộc miền |
+| `several notations match here` | hai notation không phân biệt được |

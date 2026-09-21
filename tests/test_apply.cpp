@@ -22,14 +22,14 @@ int main() {
     w.tell(r, Reason::stipulate(1));
 
     auto miss = w.applyRule(r, {alice}, "r", 3);
-    check(!miss.ok, "tiền đề chưa có thì bước không đi được");
-    check(w.showProp(miss.missing) == "alice ∈ A", "và nó chỉ đúng chỗ thiếu");
-    check(!w.toldIn(alice, B), "bước không đi được thì không ghi gì");
+    check(!miss.ok, "missing premise: the step does not go through");
+    check(w.showProp(miss.missing) == "alice ∈ A", "and it points at exactly what is missing");
+    check(!w.toldIn(alice, B), "a step that does not go through writes nothing");
 
     w.tell(w.atom(Term::of(alice), Term::of(A), true), Reason::stipulate(2));
     auto ok = w.applyRule(r, {alice}, "r", 3);
-    check(ok.ok && w.toldIn(alice, B), "đủ tiền đề thì kết luận được ghi");
-    check(w.showProp(ok.conclusion) == "alice ∈ B", "kết luận đúng hình dạng");
+    check(ok.ok && w.toldIn(alice, B), "with all premises present the conclusion is written");
+    check(w.showProp(ok.conclusion) == "alice ∈ B", "the conclusion has the right shape");
   }
 
   // --- The reason carries the rule, the binding, and the premises ---
@@ -42,14 +42,14 @@ int main() {
     w.applyRule(r, {alice}, "r", 7);
 
     const auto& rs = w.reasons(alice, B, true);
-    check(rs.size() == 1 && !rs[0].stipulated, "lý do là suy ra, không phải đặt ra");
-    check(rs[0].rule == "r" && rs[0].line == 7, "giữ nhãn luật và dòng");
+    check(rs.size() == 1 && !rs[0].stipulated, "the reason is derived, not stipulated");
+    check(rs[0].rule == "r" && rs[0].line == 7, "keeps the rule label and line");
     check(rs[0].binding.size() == 1 && rs[0].binding[0].first == "x" &&
               rs[0].binding[0].second == alice,
-          "giữ binding x := alice");
+          "keeps the binding x := alice");
     check(rs[0].antecedents.size() == 1 &&
               w.showProp(rs[0].antecedents[0].prop) == "alice ∈ A",
-          "giữ tiền đề đã tra");
+          "keeps the premises looked up");
   }
 
   // --- Several variables, tuples, transitivity ---
@@ -73,11 +73,11 @@ int main() {
            Reason::stipulate(2));
 
     auto res = w.applyRule(r, {a, b, c}, "join", 5);
-    check(res.ok, "luật ba biến với tiền đề ghép chạy");
-    check(w.showProp(res.conclusion) == "(a, c) ∈ Boss", "kết luận: " + w.showProp(res.conclusion));
+    check(res.ok, "a three-variable rule with a compound premise runs");
+    check(w.showProp(res.conclusion) == "(a, c) ∈ Boss", "conclusion: " + w.showProp(res.conclusion));
     check(w.reasons(w.resolve(Term::ofTuple({Term::of(a), Term::of(c)})), Boss, true)[0]
                   .antecedents.size() == 2,
-          "tiền đề ghép bằng and tách ra thành hai tiền đề");
+          "a premise joined by and splits into two premises");
   }
 
   // --- Negative conclusion ---
@@ -88,8 +88,8 @@ int main() {
                                        w.atom(Term::ofVar(0), Term::of(Voters), false)));
     w.tell(w.atom(Term::of(kim), Term::of(Minors), true), Reason::stipulate(1));
     auto res = w.applyRule(r, {kim}, "no vote", 4);
-    check(res.ok && w.toldOut(kim, Voters), "kết luận ∉ bật cờ âm");
-    check(!w.toldIn(kim, Voters), "và không đụng cờ dương");
+    check(res.ok && w.toldOut(kim, Voters), "a ∉ conclusion raises the negative flag");
+    check(!w.toldIn(kim, Voters), "and leaves the positive flag alone");
   }
 
   // --- Rule with no premises ---
@@ -98,7 +98,7 @@ int main() {
     ObjectId n = w.declare("n"), N = w.declare("N");
     PropId r = w.forAll("x", w.atom(Term::ofVar(0), Term::of(N), true));
     auto res = w.applyRule(r, {n}, "everything", 2);
-    check(res.ok && w.toldIn(n, N), "luật không tiền đề áp được ngay");
+    check(res.ok && w.toldIn(n, N), "a rule with no premises applies immediately");
   }
 
   // --- A compound conclusion goes into the store ---
@@ -111,8 +111,8 @@ int main() {
                w.atom(Term::ofVar(0), Term::of(Q), true))));
     w.tell(w.atom(Term::of(x), Term::of(S), true), Reason::stipulate(1));
     auto res = w.applyRule(r, {x}, "staff", 3);
-    check(res.ok && w.holds(res.conclusion), "kết luận ghép vào kho");
-    check(!w.toldIn(x, P) && !w.toldIn(x, Q), "và không tự tách ra thành hai ô");
+    check(res.ok && w.holds(res.conclusion), "a compound conclusion goes into the store");
+    check(!w.toldIn(x, P) && !w.toldIn(x, Q), "and does not split itself into two cells");
   }
 
   // --- A step that does not go through leaves the world unchanged ---
@@ -123,7 +123,7 @@ int main() {
                                        w.atom(Term::ofVar(0), Term::of(B), true)));
     size_t cells = w.cellCount();
     auto res = w.applyRule(r, {x}, "r", 9);
-    check(!res.ok && w.cellCount() == cells, "không ô nào mọc thêm khi bước hỏng");
+    check(!res.ok && w.cellCount() == cells, "no cell appears when a step fails");
   }
 
   std::cout << (failures ? "\nFAILURES: " : "\nall passed, failures: ") << failures << "\n";
