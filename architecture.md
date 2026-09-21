@@ -1,5 +1,8 @@
 # Kiến trúc vproof
 
+Tài liệu ngôn ngữ — viết được những câu nào — nằm ở [`docs/language.md`](docs/language.md)
+(tiếng Anh: [`docs/language.en.md`](docs/language.en.md)). File này là thiết kế và lý do.
+
 Ghi 2026-09-20.
 
 ## Mở đầu
@@ -97,6 +100,11 @@ bình thường, không phải một hạng mục cơ chế biết trước. "S 
 tính của S — nó là một fact, cờ ∈ của ô `(S, SET)`. `SET` cũng thuộc `SET`: ô `(SET, SET)`
 bật cờ ∈, đặt ra từ đầu, và đó là chỗ cắt vòng để cột `SET` tồn tại được.
 
+`Let A be a set.` không đặt ra một loại nào — nó ghi fact `A ∈ SET`. Tương tự `be a
+relation` ghi `∈ RELATION`, `be a map` ghi `∈ MAP`. `be an entity` hay `be objects` chỉ
+khai báo đối tượng, không ghi gì thêm, nên ô `(alice, SET)` vẫn là chưa ai nói gì — không
+phải "alice không phải set".
+
 Ma trận tự nó không hiểu cột của nó là set. Một cột được đánh chỉ mục bằng một đối tượng
 bất kỳ, và runtime không tra gì trước khi ghi — `alice ∈ 5` viết được, đúng như mọi câu
 ghép đúng cú pháp khác.
@@ -154,8 +162,9 @@ dung người dùng nạp vào.
 
 ### Áp hàm
 
-`Tuple(N)` là áp hàm `Tuple` vào `N`. `x(i)` là áp hàm `x` vào `i`. `t[i]` và `t(i)` cũng
-vậy — lấy phần tử thứ `i` của một tuple chính là áp hàm, vì tuple là hàm.
+`Tuple(N)` là áp hàm `Tuple` vào `N`. `x(i)` là áp hàm `x` vào `i`, và lấy phần tử thứ `i`
+của một tuple `t(i)` cũng vậy, vì tuple là hàm. (Cú pháp `t[i]` từng được bàn nhưng chưa cài;
+hiện chỉ có dạng `F(a)`.)
 
 Áp hàm **không** phải thao tác của cơ chế. Hàm, quan hệ, set đều dựng từ primitive, nên áp
 hàm cũng vậy: nó là **cú pháp**, và nó dịch xuống các bước thường dùng luật của thư viện.
@@ -167,25 +176,30 @@ Tạo giá trị của một hàm là một bước nghĩ, nên nó phải là m
 Apply F to a.
 ```
 
-Câu này dịch ra một lần áp luật cộng một lần lấy nhân chứng: từ `F ∈ Function` và
+Về nghĩa, câu này là một lần áp luật cộng một lần lấy nhân chứng: từ `F ∈ Function` và
 `(F, Domain(F)) ∈ TotalOn` suy ra `there exists y such that (a, y) ∈ F`, rồi lấy nhân chứng
-ra. Tiền đề của lần áp luật đó gồm `a ∈ Domain(F)`, nên việc "tra miền" chỉ là tra tiền đề,
-y như mọi lần áp luật khác — cơ chế không biết `Domain` là gì và không cần biết.
+ra. Về cài đặt, tầng ngôn ngữ làm thẳng mà không đi qua hai luật đó: nó tra xem `Domain(F)`
+đã có chưa, tra ô `(a, Domain(F))` có cờ ∈ chưa — tra như tra mọi tiền đề — rồi tạo đối tượng
+và ghi `(a, F(a)) ∈ F` với lý do *áp hàm*. Runtime không có thao tác áp hàm nào và không
+biết `Domain` là gì; `Domain` là tên do prelude khai báo.
 
 Đi được thì có một đối tượng mới, `(a, F(a)) ∈ F` được ghi kèm lý do, và đối tượng đó là giá
 trị canonical của `F` tại `a`. `F(a)` là tên canonical của chính nó, không có một `F(a)` nào
 khác đứng bên cạnh, và viết `F(a)` lần sau trả về đúng nó.
 
 Thiếu tiền đề thì bước không đi được: không đối tượng nào được tạo, không fact nào được
-ghi, và lỗi chỉ đúng chỗ thiếu. Nhắc `F(a)` ở bất cứ đâu trước khi bước áp xảy ra
-cũng không đi được. Trong luật thì `F(x)` viết bình thường; khi áp luật với `x := a`,
-runtime tra `F(a)`, và chưa có thì bước áp luật ấy không đi được.
+ghi, và lỗi chỉ đúng chỗ thiếu. Nhắc `F(a)` ở bất cứ đâu trước khi bước áp xảy ra cũng
+không đi được.
+
+Giới hạn hiện có: `F(x)` với `x` là biến của một luật **chưa** viết được, vì `F(a)` được quy
+về đối tượng ngay lúc parse, mà biến thì chưa có đối tượng. Trong luật phải nói qua quan hệ:
+`(x, y) ∈ F` thay cho `F(x) = y`.
 
 ```
-Let F be an element of MAP.
-Let a be an object.
+Let F be a map.
+Let a be an entity.
 Apply Domain to F.
-Apply F to a.            -- không đi được: chưa xác lập 'a ∈ Domain(F)'
+Apply F to a.            -- không đi được: chưa xác lập `a in Domain(F)`
 ```
 
 Chỗ này không phá "ghi luôn thành công": thao tác ghi không xảy ra, chứ không phải xảy ra
@@ -227,9 +241,16 @@ của một cặp lại chứa cặp. Cặp dừng ở chính nó; nó là sàn.
 | `(a, b, c)` và dài hơn | hàm `{(1, a), (2, b), (3, c)}` thuộc `Tuple(3)` |
 | `(x(1), …, x(N))` | đã là dạng hàm |
 
-Bước khai triển là một bước phải viết ra, không tự chạy. Viết `(a, b, c) ∈ R` thì ô đó dùng
-đúng đối tượng liệt kê, và chỉ khi có bước khai triển thì mới có fact nối nó với dạng hàm;
-fact đó ghi vào quan hệ của cơ chế, rồi luật của thư viện Eq nối sang `Eq`. Đây đúng là
+Bước khai triển là một bước phải viết ra, không tự chạy:
+
+```
+Expand (a, b, c) as t3.
+```
+
+Nó tạo đối tượng `t3`, ghi `(1, a)`, `(2, b)`, `(3, c)` vào `t3`, và ghi
+`((a, b, c), t3) ∈ Expanded`. Viết `(a, b, c) ∈ R` thì ô đó dùng đúng đối tượng liệt kê;
+chỉ khi có bước khai triển thì mới có fact nối nó với dạng hàm, và nối tiếp sang `Eq` là một
+luật người dùng tự nạp. Đây đúng là
 khuôn của `2 + 3` với `5`: hai term khác nhau, một bước nhận ra chúng chỉ một thứ.
 
 Canonical ở đây có nghĩa là *dạng để quy về khi hai dạng gặp nhau*, không có nghĩa là dạng
@@ -564,9 +585,24 @@ tên nó. Không ai nhắc tới một mệnh đề như một đối tượng t
 
 Cơ chế giữ hai chiều:
 
-**Cấu trúc.** Đại diện là term có cấu trúc, dựng từ chính các đại diện con — `(and, p, q)`,
-`(implies, p, q)`, `(or, p, q)`, `(all, x, p)`. Nhìn vào là đọc được hình dạng, vì tuple đọc
-được.
+**Cấu trúc.** Đại diện là term có cấu trúc, dựng từ chính các đại diện con:
+
+| mệnh đề | đại diện |
+|---|---|
+| `t ∈ S` | `(Mem, t, S)` |
+| `t ∉ S` | `(NotMem, t, S)` |
+| `A and B` | `(And, a, b)` — tương tự `Or`, `Implies`, `Iff` |
+| `not (A)` | `(Not, a)` |
+| `for every x, A` | `(All, a)` |
+| `there exists x such that A` | `(Ex, a)` |
+
+Biến buộc bên trong thân thành `(Var, k)` với `k` là chỉ số de Bruijn, không phải tên. Bắt
+buộc phải thế: hai mệnh đề chỉ khác tên biến buộc là cùng một mệnh đề, nên đại diện của
+chúng phải trùng, và chỉ số làm chuyện đó tự đúng. Nhìn vào là đọc được hình dạng, vì tuple
+đọc được.
+
+Trong nguồn, `[A]` là đại diện của mệnh đề `A`, và `[(h)]` là đại diện của mệnh đề mang nhãn
+`h`. Viết nó ra chính là hành động làm nó sinh ra.
 
 **`Holds`.** `p ∈ Holds` khi và chỉ khi mệnh đề mà `p` đại diện đang có trong kho. Đây là
 một ô như mọi ô, nên nó theo scope: vào scope giả định `A` thì đại diện của `A` vào `Holds`,
@@ -575,8 +611,18 @@ ra scope thì rụng theo.
 Phần còn lại là thư viện, viết bằng V như mọi thứ khác:
 
 ```
-Rule (holds and):     for every p, q, (and, p, q) ∈ Holds iff p ∈ Holds and q ∈ Holds.
-Rule (holds implies): for every p, q, if (implies, p, q) ∈ Holds and p ∈ Holds then q ∈ Holds.
+Rule (holds and):     for every p, q, (And, p, q) ∈ Holds iff p ∈ Holds and q ∈ Holds.
+Rule (holds implies): for every p, q, if (Implies, p, q) ∈ Holds and p ∈ Holds then q ∈ Holds.
+Rule (dne):           for every p, if (Not, (Not, p)) ∈ Holds then p ∈ Holds.
+```
+
+Phép thế trên đại diện cũng có, và nó không viết lại: `Instantiate (h) at t.` giải mã đại
+diện về mệnh đề thật, dùng đúng hàm `instantiate` mà áp luật đang dùng, rồi mã hoá lại, và
+ghi `(đại diện của h, t, đại diện của thể hiện) ∈ Instance`. Cùng một hàm, nên hai phép thế
+không thể lệch nhau. Nhờ đó ∀-elim viết được thành một luật thường:
+
+```
+Rule (all elim): for every p, t, q, if p ∈ Holds and (p, t, q) ∈ Instance then q ∈ Holds.
 ```
 
 ### Vì sao chuyện này đáng giá
@@ -589,13 +635,13 @@ Từ đó, một lối lập luận lặp đi lặp lại chứng minh **một l
 ```
 Rule (chain): for every p, q, r, s,
     if p ∈ Holds
-       and (implies, p, (or, q, r)) ∈ Holds
-       and (implies, q, s) ∈ Holds
-       and (implies, r, s) ∈ Holds
+       and (Implies, p, (Or, q, r)) ∈ Holds
+       and (Implies, q, s) ∈ Holds
+       and (Implies, r, s) ∈ Holds
     then s ∈ Holds.
 
 Rule (cases): for every p, q, c,
-    if (or, p, q) ∈ Holds and (implies, p, c) ∈ Holds and (implies, q, c) ∈ Holds
+    if (Or, p, q) ∈ Holds and (Implies, p, c) ∈ Holds and (Implies, q, c) ∈ Holds
     then c ∈ Holds.
 ```
 
@@ -633,6 +679,39 @@ phân số, cộng phân thức, quy đồng, gom số hạng. `π` và `e` số
 
 **Cửa 3 — số học của máy.** Cơ chế đưa biểu thức xuống bộ xử lý số học và nhận kết quả về.
 Numeral là hữu tỉ chính xác, tử mẫu không giới hạn độ lớn, luôn tối giản.
+
+`2 + 3` là một term riêng — tuple `(Plus, 2, 3)` — khác hẳn đối tượng `5`. Cửa 2 và cửa 3 là
+hai cách khác nhau để có một bước nối hai term đó; parser không tự nối.
+
+### Cửa 2: dạng chuẩn và điều kiện
+
+`Simplify` đưa biểu thức về một dạng chuẩn duy nhất: **phân thức hữu tỉ nhiều biến** — tử và
+mẫu là đa thức, hệ số hữu tỉ chính xác, và "biến" là một đối tượng bất kỳ (một tên, `pi`,
+một giá trị áp hàm). Một dạng chuẩn đó làm được cả rút gọn, triển khai, cộng phân số lẫn
+cộng phân thức. Toán tử có: `+ - * /` và `^` với số mũ nguyên không âm.
+
+Kết quả ghi vào một trong hai quan hệ:
+
+- `(u, v) ∈ Simplified` — đẳng thức không kèm điều kiện.
+- `(u, v, k) ∈ SimplifiedIf` — đẳng thức chỉ đúng dưới điều kiện `k`, với `k` là **đại diện
+  của mệnh đề điều kiện**.
+
+Điều kiện sinh ra khi triệt một nhân tử có chứa biến. `x/x` thành `1` chỉ khi `x ≠ 0`;
+`(x^2 - 1)/(x - 1)` thành `1 + x` chỉ khi `x - 1 ≠ 0` (một biến thì chạy thuật toán Euclid
+trên đa thức hữu tỉ; nhiều biến thì mới triệt ước đơn thức chung). Mỗi nhân tử bị triệt thành
+một mệnh đề `(f, 0) ∉ Eq`, và các mệnh đề đó ghép bằng `and` thành `k`. Triệt **hệ số** thì
+không cần điều kiện, vì một số hữu tỉ khác 0 thì khác 0 ở mọi chỗ.
+
+Cơ chế không được phép giấu một điều kiện vào trong một đẳng thức, nên điều kiện đi ra ngoài
+và luật dùng `SimplifiedIf` phải đòi nó đã được xác lập:
+
+```
+Rule (eq simp if): for every u, v, k,
+    if (u, v, k) ∈ SimplifiedIf and k ∈ Holds then (u, v) ∈ Eq.
+```
+
+`Simplify e as (nz).` đặt nhãn cho điều kiện, để `Assume (nz).` đặt ra đúng mệnh đề đó và
+`[(nz)]` trỏ tới đại diện của nó, khỏi phải chép lại ở dạng chuẩn của tầng đại số.
 
 ### Máy luôn trả về kèm sai số
 
@@ -693,6 +772,13 @@ Sai số cộng dồn là một luật, không phải một cơ chế. Viết đ
 đối, khoảng, theo bậc độ lớn — thì ra nghĩa khác. Viết một định nghĩa khiến `1` xấp xỉ `100`
 cũng được, và đó là một lý thuyết hợp lệ. Cơ chế không có ý kiến.
 
+### So sánh
+
+`a <= b` là cách viết của `(a, b) ∈ LessEq`; `a < b` của `(a, b) ∈ Less`; `a > b` và
+`a >= b` viết ngược lại thành `Less`/`LessEq`. So sánh không phải một loại mệnh đề riêng, nó
+vẫn là một ô. `Compute a <= b.` cho máy quyết định và ghi **cả hai chiều**: đúng thì bật cờ
+∈, sai thì bật cờ ∉, lý do là *máy tính ra*. Ô máy chưa được hỏi thì vẫn là chưa ai nói gì.
+
 ### Các tầng số
 
 **ℚ** có sẵn ở dạng giá trị: numeral của cơ chế chính là hữu tỉ.
@@ -704,8 +790,8 @@ không phải một dãy chữ số. Lý do không phải kỹ thuật: số th�
 đẳng thức trên nó không quyết định được. Lean cũng đúng như vậy — ℝ dựng từ dãy Cauchy hữu
 tỉ, `noncomputable`, và dùng thuần qua giao diện trường sắp thứ tự đầy đủ.
 
-**Chia cho 0** không lỗi và không quy ước giá trị. Cơ chế ghi một fact "không có giá trị"
-vào quan hệ của riêng nó, và lý thuyết tự quyết xử lý thế nào.
+**Chia cho 0** không lỗi và không quy ước giá trị. `Compute 1 / 0.` ghi `(Div, 1, 0) ∈ NoValue`,
+và lý thuyết tự quyết xử lý thế nào.
 
 ## Expressibility
 
@@ -724,65 +810,50 @@ mốc.
 ### So với Lean
 
 Mốc là **tiềm lực ngang**, không phải viết giống. Lean mạnh ở chỗ lượng từ đi trên mọi thứ,
-kể cả kiểu và mệnh đề. V bù bằng một nước khác: set là đối tượng, và cả hai vị trí của `∈`
-nhận term bất kỳ, nên `for every S, …` là lượng từ bậc nhất mà vẫn với tới mọi tập. Đó đúng
-là nước ZFC đi, và nó phủ gần hết toán học.
+kể cả kiểu và mệnh đề. V đi hai nước khác, và hai nước đó phủ đúng chỗ ấy.
 
-Hai chỗ V không với thẳng tới là lượng từ trên mệnh đề và lượng từ trên luật. Hệ quả nặng
-nhất của chúng là không viết được axiom schema, vì schema là một họ tiên đề trên mọi công
-thức.
-
-Cả hai với tới được bằng cách dựng một lý thuyết về mệnh đề — mã hóa mệnh đề thành đối
-tượng, rồi nối lại bằng `Sat`. Đây là nội dung người dùng viết, không cần cơ chế thêm gì:
+**Set là đối tượng.** Cả hai vị trí của `∈` nhận term bất kỳ, nên `for every S, …` là lượng
+từ bậc nhất mà vẫn với tới mọi tập. Hệ quả: axiom schema không cần. Separation và quy nạp của
+ZFC là một họ vô hạn tiên đề, một cái cho mỗi công thức, vì ở đó lượng từ không đi trên tính
+chất; ở đây tính chất là set, nên mỗi cái là **một** luật, và phủ rộng hơn cả họ:
 
 ```
-Rule (prop mem): for every S, (mem, S) ∈ Prop.
-Rule (sat mem):  for every x, S, (x, (mem, S)) ∈ Sat iff x ∈ S.
-Rule (sat both): for every x, p, q, (x, (both, p, q)) ∈ Sat iff (x, p) ∈ Sat and (x, q) ∈ Sat.
-Rule (sat neg):  for every x, p, (x, (neg, p)) ∈ Sat iff (x, p) ∉ Sat.
+Rule (sep): for every A, S,
+    there exists B such that (for every x, x ∈ B iff x ∈ A and x ∈ S).
+
+Rule (induction): for every P,
+    if 0 ∈ P and (for every n, if n ∈ N and n ∈ P then n + 1 ∈ P)
+    then (for every n, if n ∈ N then n ∈ P).
 ```
 
-Dòng `(sat mem)` là chỗ chịu lực: nó nối công thức đã mã hóa với membership thật, nên mệnh
-đề mã hóa không phải một thế giới song song tự nói chuyện với nhau mà dính vào đúng thế giới
-các luật khác đang nói tới. Các constructor còn lại đóng kín theo từng phép ghép.
+Và vì V không phải một danh sách tiên đề cố định, cần một tập con cụ thể thì khai nó ra rồi
+nói điều kiện — comprehension viết thẳng, kể cả tập Russell.
 
-Và vì lượng từ trên `Prop` là lượng từ bậc nhất trên đối tượng, schema biến thành **một**
-luật thay vì một họ vô hạn luật:
+**Mệnh đề là đối tượng.** Lượng từ trên mệnh đề đi qua tầng phản chiếu của cơ chế (xem mục
+*Mệnh đề là đối tượng*): đại diện là đối tượng, nên lượng từ trên đại diện là bậc nhất. Một
+lối lập luận chứng minh một lần rồi áp một dòng mãi mãi — `(chain)`, `(cases)`, `(dne)`, và
+cả ∀-elim — đều là luật thường. Cái Lean đặt ở siêu ngôn ngữ, thao tác trên `Expr` và không
+phải định lý của logic, ở đây nằm trong cùng thế giới, có lý do, đọc ngược được.
 
-```
-Rule (sep): for every A, p in Prop,
-    there exists B such that (for every x, x ∈ B iff x ∈ A and (x, p) ∈ Sat).
-```
+**`Prop`/`Sat` viết tay còn đúng một chỗ dùng:** nhúng **một logic khác** — trực giác, modal,
+lambda calculus — khi muốn một bản sao do mình kiểm soát chứ không mượn mệnh đề của V. Bản
+v0.3 đã chạy thật một lý thuyết natural deduction nhúng như vậy. Mã hóa tay thì trung thực
+đúng bằng các luật cầu người viết đặt ra, và dòng chịu lực là luật nối công thức mã hóa với
+membership thật, kiểu `(x, (mem, S)) ∈ Sat iff x ∈ S`. Hình dạng tuple đặt vào `Sat` là do
+luật quyết, không có arity nào cố định, nên lượng từ trong mã hóa cũng chỉ là luật thêm.
 
-Chỗ chênh thật với Lean không nằm ở cái nói được, mà ở giá. Mọi thứ đi qua `Prop`/`Sat` tốn
-thêm một tầng bước. Và V không có tính toán theo định nghĩa: mỗi lần nhận ra hai tên chỉ một
-thứ đều là một bước phải viết ra. Cái sau không phải thiếu sót — nó là chốt thiết kế, vì
-định nghĩa việc nghĩ thì không được giấu bước nghĩ.
+**Chỗ chênh thật nằm ở giá, không ở cái nói được.** V không có tính toán theo định nghĩa:
+Lean coi `2 + 2` và `4` là một, còn ở đây mỗi lần nhận ra hai tên chỉ một thứ là một bước
+phải viết. Không phải thiếu sót — định nghĩa việc nghĩ thì không được giấu bước nghĩ — nhưng
+đó là khoảng cách lớn nhất về độ dài chứng minh.
 
-Một chỗ V rộng hơn Lean: không có phân tầng universe. `SET ∈ SET`, `Domain(Domain) = MAP`,
-luật kiểu Russell — đều viết được. Lean chặn bằng kiểu; V cho viết và để mâu thuẫn chỉ lộ ra
-khi có người chỉ ra.
-
-Lượng từ trong mã hóa cũng chỉ là luật, không có gì chặn. Thành phần thứ nhất của tuple đặt
-vào `Sat` giữ một tuple giá trị, và lượng từ buộc biến cuối tức là nối thêm một giá trị vào
-tuple đó:
-
-```
-Rule (sat all): for every t, S, p,
-    (t, (all, S, p)) ∈ Sat iff
-        (for every c, u, if c ∈ S and (t, c, u) ∈ Append then (u, p) ∈ Sat).
-
-Rule (sat ex): for every t, S, p,
-    (t, (ex, S, p)) ∈ Sat iff
-        (there exists c, u such that c ∈ S and (t, c, u) ∈ Append and (u, p) ∈ Sat).
-```
-
-Một luật cho mọi arity, không phải một họ `all2`, `all3`, `all4`. Thứ duy nhất cần là
-`Append` viết được một lần cho mọi độ dài, và nó viết được vì tuple đã là hàm trên `Index(N)`.
-
-Và toàn bộ chuyện này chỉ dính tới việc nói về cú pháp. Viết một mệnh đề có lượng từ thì cứ
-viết thẳng `for every`, `there exists` trong luật, bao nhiêu biến và lồng bao nhiêu tầng cũng
-được, không cần `Prop`, không cần `Sat`, không cần `Append`.
+**Chỗ V rộng hơn Lean:** không có phân tầng universe. `SET ∈ SET`, `Domain(Domain) = MAP`,
+mệnh đề nói về chính nó, luật kiểu Russell — viết được hết. Lean chặn bằng kiểu. Ở đây, định
+nghĩa chân lý cho toàn bộ ngôn ngữ ngay bên trong nó là chỗ câu nói dối sống, và nó viết
+được; đi vào thì một ô có cả hai cờ, mỗi cờ mang lý do riêng — không nổ, không cách ly, và
+đọc lại được từng cờ đến từ chuỗi nào. Cái mất là không phát biểu được "mã hóa trung thực với
+toàn bộ ngôn ngữ" thành định lý của chính hệ, chỉ phát biểu được cho từng mảnh; mô tả một hệ
+**khác** thì không có giới hạn đó.
 
 ## Thư viện đi kèm
 
@@ -790,25 +861,114 @@ Cơ chế xuất xưởng với con số không về logic: không đẳng thứ
 trung, không phủ định kép, không tính mở rộng, không quy nạp. Nhưng có một bộ thư viện đi
 kèm, viết bằng chính V, để người dùng có cái mà làm việc.
 
-**Mức 1 — cơ chế đã gọi tên, nên không thể thiếu.**
+Bộ đó là `lib/prelude.v`, nạp trước mọi file bằng đúng cái máy chạy file người dùng, và
+nhúng vào nhị phân qua `tools/embed_prelude.py`. Không có dòng nào của nó nằm trong C++.
 
-- `SET` — `SET ∈ SET`, cộng luật "đã làm cột thì phải thuộc SET", để quan hệ `Column` mà cơ
-  chế ghi ra có ý nghĩa.
-- `Eq` — refl, symm, trans, subst, và các luật nối `Defined`, `Computed` sang `Eq`. Không có
-  nó thì những gì cơ chế ghi ra không dẫn đi đâu.
+**Prelude — luôn nạp.**
 
-**Mức 2 — nền dùng chung.** `Relation`, `Function` (kèm `TotalOn`, `MAP`, `Domain`),
-`Naturals` và so sánh, `Index(N)`, `Tuple(N)`, `Approx`. `MAP` và `Domain` nằm ở đây chứ
-không phải mức 1: cơ chế không tra chúng, cú pháp `F(a)` mới cần chúng, và cú pháp đó dịch
-xuống các bước thường. Thứ tự nạp: `Eq` trước `Function`, so sánh trước `Index`, `Index`
-trước `Tuple`.
+- `SET`, `RELATION`, `MAP` là đối tượng thường: `SET ∈ SET`, `RELATION ∈ SET`,
+  `MAP ∈ SET`, và hai luật `(relation is set)`, `(map is relation)`.
+- `Domain` là hàm, và chuỗi của nó dừng ở `Apply Domain to Domain as MAP.` — dạng `as` là
+  dạng đặt ra, cùng loại với `SET ∈ SET`.
+- `Eq`: `(eq refl)`, `(eq symm)`, `(eq trans)`, `(eq subst)`, và `(eq from definition)` nối
+  `Defined` sang `Eq`.
+- `Function`, `TotalOn`, với `(function is relation)`, `(function unique)`, `(total on)`.
+- `Approx`, với `(approx def)` và `(approx sum)` — một định nghĩa xấp xỉ, không phải định
+  nghĩa duy nhất.
 
-**Mức 3 — tùy chọn, và cố tình để tùy chọn.** Logic cổ điển (nổ, bài trung, phủ định kép),
-tính mở rộng, quy nạp cho một miền cụ thể, lý thuyết tập hợp (`Subset`, `Union`, `Inter`,
-`PowerOf`), `Prop`/`Sat` khi muốn nói về cú pháp.
+**Cố tình không có trong prelude**, vì nạp chúng là tuyên bố tin một thứ gì đó, nên phải do
+người viết tự đặt vào file của mình:
 
-Không nạp mức 3 thì hành vi là paraconsistent, và đó là mặc định chứ không phải một chế độ
-đặc biệt.
+- luật nối `Computed`, `Simplified`, `SimplifiedIf`, `Expanded` sang `Eq` — tin máy, tin tầng
+  đại số;
+- logic cổ điển — nổ, bài trung, phủ định kép;
+- `(column is set)` — "đã làm cột thì phải thuộc SET". Nạp nó vào prelude thì `alice ∈ 5`
+  sẽ lặng lẽ kéo theo `5 ∈ SET` cho mọi người; để ngoài thì ai cần phán xét mới tự nạp.
+
+**Viết được, chưa đóng gói sẵn.** `Naturals`, `Index(N)`, `Tuple(N)`, quy nạp, lý thuyết tập
+hợp (`Subset`, `Union`, `Inter`, `PowerOf`) — có ví dụ trong `examples/`, chưa vào prelude.
+
+Không nạp logic cổ điển thì hành vi là paraconsistent, và đó là mặc định chứ không phải một
+chế độ đặc biệt.
+
+## Đóng gói lý thuyết
+
+```
+Theory Preorder {
+    Let Carrier be a set.
+    Let Below be a relation.
+    Rule (refl):  for every x, if x in Carrier then (x, x) in Below.
+    Rule (trans): for every x, y, z,
+        if (x, y) in Below and (y, z) in Below then (x, z) in Below.
+}
+
+Import Preorder as Age with (Carrier := People, Below := Older).
+```
+
+Thân của `Theory` giữ nguyên ở dạng token, không parse, vì tên bên trong chưa có nghĩa cho
+tới khi `Import` gán chúng vào đâu đó. `Import` chạy lại thân dưới một phép đổi tên:
+
+- tên được gán trỏ thẳng vào đối tượng đã có;
+- tên khai báo bên trong mà không được gán thành tên riêng của thể hiện — `First_basepoint`,
+  `Second_basepoint` — nên hai lần import không giẫm lên nhau;
+- nhãn mang tên thể hiện: `(trans)` thành `(Age trans)`;
+- lý thuyết lồng nhau được: `Import` viết bên trong một `Theory` thì tên thể hiện con mang
+  tên thể hiện ngoài, `(One Sub refl)`.
+
+Danh tính một thể hiện là cặp (tên lý thuyết, ánh xạ); import lại đúng cặp đó là không làm
+gì. Runtime không biết có lý thuyết nào tồn tại: import chỉ là chạy lại câu lệnh, nên luật
+`Age trans` là một luật bình thường trong kho.
+
+## Notation
+
+```
+Notation: "A manages B" means (A, B) in Boss.
+```
+
+Notation là cách viết, không phải cơ chế: dùng ở chỗ nào một mệnh đề đứng được, kể cả bên
+trong luật với biến của luật ngồi trong lỗ, và nó mở ra đúng một mệnh đề. Vế phải không chứa
+lượng từ.
+
+Chữ nào trong mẫu là lỗ thì phải đọc vế phải mới biết, nên parser đọc hai lượt: lượt một coi
+mọi chữ là lỗ và xem vế phải dùng chữ nào; lượt hai đọc lại với đúng những chữ đó. Chữ
+không được dùng là chữ cố định.
+
+**Hygiene.** Vế phải quy về đối tượng ngay lúc khai báo: `Boss` thành một `ObjectId`, không
+còn là tên. Chỗ dùng chỉ điền term vào lỗ, không tra tên nào, nên biến của một luật trùng
+tên với `Boss` không bắt được nó. Đây là đúng chỗ bản v0.3 hỏng. Lỗ đánh số ở một dải riêng,
+tách khỏi chỉ số de Bruijn.
+
+**Quá tải.** Hai mẫu cùng hình dạng phân biệt bằng `where`:
+
+```
+Notation: "A plus B is C" means (A, B, C) in VecSum where A in Vectors, B in Vectors.
+Notation: "A plus B is C" means (A, B, C) in NumSum where A in Scalars, B in Scalars.
+```
+
+Dài nhất thắng; hai mẫu cùng khớp cùng độ dài mà không phân biệt được thì báo lỗi, không
+chọn bừa. Giới hạn: `where` chỉ kiểm được khi chỗ điền là đối tượng cụ thể, còn biến của
+luật thì bỏ qua.
+
+## Quan hệ và nhãn của cơ chế
+
+Mọi thứ dưới đây là đối tượng thường, gọi được bằng tên trong nguồn. Cơ chế ghi vào chúng;
+lý thuyết đọc chúng. Không có cái nào mang nghĩa logic cho tới khi có luật nói về nó.
+
+| tên | ai ghi, khi nào |
+|---|---|
+| `Holds` | đồng bộ hai chiều với kho mệnh đề, cho mọi mệnh đề đã có đại diện |
+| `Column` | mỗi lần một đối tượng được dùng làm cột |
+| `Defined` | `Let t = (a, b).` ghi `(t, (a, b))` |
+| `Computed` | `Compute e.` ghi `(e, kết quả, sai số)` |
+| `Less`, `LessEq` | `Compute a < b.`, `Compute a <= b.` ghi cả hai chiều |
+| `NoValue` | `Compute` gặp chia cho 0 |
+| `Simplified` | `Simplify e.` khi không phải triệt gì có chứa biến |
+| `SimplifiedIf` | `Simplify e.` khi có triệt, kèm đại diện của điều kiện |
+| `Expanded` | `Expand (a, b, c) as t.` ghi `((a, b, c), t)` |
+| `Instance` | `Instantiate (h) at t.` ghi `(đại diện h, t, đại diện thể hiện)` |
+
+Nhãn dựng đại diện và biểu thức: `Mem`, `NotMem`, `And`, `Or`, `Implies`, `Iff`, `Not`,
+`All`, `Ex`, `Var`, và `Plus`, `Minus`, `Times`, `Div`, `Pow`.
 
 ## Vòng đời một chương trình
 

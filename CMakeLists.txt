@@ -49,4 +49,4 @@ target_link_libraries(vproof PRIVATE vruntime)
 
 add_executable(test_examples tests/test_examples.cpp)
 target_link_libraries(test_examples PRIVATE vruntime)
-add_test(NAME examples COMMAND test_examples ${CMAKE_CURRENT_SOURCE_DIR}/examples)
+add_test(NAME examples COMMAND test_examples ${CMAKE_CURRENT_SOURCE_DIR}/examples ${CMAKE_CURRENT_SOURCE_DIR}/docs)

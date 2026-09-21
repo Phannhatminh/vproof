@@ -46,8 +46,48 @@ static void expectError(const std::string& name, const std::string& source,
   }
 }
 
+// Mọi khối ```v trong tài liệu ngôn ngữ là một chương trình đầy đủ. Chạy hết
+// chúng để tài liệu không lệch khỏi code.
+static void runDocBlocks(const std::string& path) {
+  std::string text = slurp(path);
+  if (text.empty()) {
+    std::cout << "FAIL  " << path << " — không đọc được\n";
+    ++failures;
+    return;
+  }
+  size_t pos = 0;
+  int n = 0;
+  while ((pos = text.find("```v\n", pos)) != std::string::npos) {
+    size_t start = pos + 5;
+    size_t end = text.find("```", start);
+    if (end == std::string::npos) break;
+    std::string src = text.substr(start, end - start);
+    pos = end + 3;
+    ++n;
+
+    Interp interp;
+    try {
+      auto rep = interp.run(src);
+      bool ok = rep.checksFailed == 0;
+      std::cout << (ok ? "ok    " : "FAIL  ") << path << " khối " << n << " — " << rep.checksRun
+                << " kiểm tra, " << rep.checksFailed << " sai\n";
+      if (!ok) ++failures;
+    } catch (const std::exception& e) {
+      std::cout << "FAIL  " << path << " khối " << n << " — " << e.what() << "\n";
+      ++failures;
+    }
+  }
+  if (n == 0) {
+    std::cout << "FAIL  " << path << " — không có khối nào\n";
+    ++failures;
+  }
+}
+
 int main(int argc, char** argv) {
   std::string dir = argc > 1 ? argv[1] : "examples";
+  std::string docs = argc > 2 ? argv[2] : "docs";
+  runDocBlocks(docs + "/language.md");
+  runDocBlocks(docs + "/language.en.md");
   runFile(dir + "/boss.v", 1);
   runFile(dir + "/cases.v", 1);
   runFile(dir + "/forall.v", 2);
