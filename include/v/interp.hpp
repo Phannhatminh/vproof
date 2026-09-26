@@ -16,10 +16,16 @@ class Interp {
   struct Report {
     int checksRun = 0;
     int checksFailed = 0;
+    // Steps that did not go through. Only filled in keep-going mode; otherwise the first
+    // such step throws.
+    int stepsStuck = 0;
     std::vector<std::string> lines;  // run trace, printed for the reader
   };
 
-  Report run(const std::string& source);
+  // In keep-going mode a step that does not go through is recorded in the trace and the
+  // run moves on to the next statement, so one change shows everything it breaks. A
+  // statement that cannot be parsed still stops the run.
+  Report run(const std::string& source, bool keepGoing = false);
 
   World& world() { return w_; }
 

@@ -240,6 +240,32 @@ int main(int argc, char** argv) {
               "Assume (h): zz in A.\n",
               "not declared");
 
+  // Keep-going mode: a stuck step is recorded, later statements still run, and a step that
+  // depended on the stuck one gets stuck on its missing premise.
+  {
+    Interp interp;
+    auto rep = interp.run(
+        "Let a be an entity.\n"
+        "Let A, B, C be sets.\n"
+        "Rule (ab): for every x, if x in A then x in B.\n"
+        "Rule (bc): for every x, if x in B then x in C.\n"
+        "By rule (ab) applied to (a), it follows that a in B.\n"
+        "By rule (bc) applied to (a), it follows that a in C.\n"
+        "Assume (h): a in A.\n"
+        "Therefore a in A.\n",
+        true);
+    int stuckOnLine5 = 0, stuckOnLine6 = 0;
+    for (const std::string& l : rep.lines) {
+      if (l.rfind("  stuck line 5:", 0) == 0) ++stuckOnLine5;
+      if (l.rfind("  stuck line 6:", 0) == 0) ++stuckOnLine6;
+    }
+    bool ok = rep.stepsStuck == 2 && stuckOnLine5 == 1 && stuckOnLine6 == 1 &&
+              rep.checksRun == 1 && rep.checksFailed == 0;
+    std::cout << (ok ? "ok    " : "FAIL  ") << "keep-going records stuck steps and runs on — "
+              << rep.stepsStuck << " stuck, " << rep.checksRun << " checks\n";
+    if (!ok) ++failures;
+  }
+
   std::cout << (failures ? "\nFAILURES: " : "\nall passed, failures: ") << failures << "\n";
   return failures ? 1 : 0;
 }

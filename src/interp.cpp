@@ -494,7 +494,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
   }
 }
 
-Interp::Report Interp::run(const std::string& source) {
+Interp::Report Interp::run(const std::string& source, bool keepGoing) {
   Report rep;
   // Mechanism tags are usable as ordinary names, so rules over representatives can be
   // written.
@@ -515,7 +515,19 @@ Interp::Report Interp::run(const std::string& source) {
     while (pre.more()) exec(pre.next(), ignored);
   }
   parser_.begin(source);
-  while (parser_.more()) exec(parser_.next(), rep);
+  while (parser_.more()) {
+    Stmt st = parser_.next();
+    if (!keepGoing) {
+      exec(st, rep);
+      continue;
+    }
+    try {
+      exec(st, rep);
+    } catch (const ParseError& e) {
+      ++rep.stepsStuck;
+      rep.lines.push_back(std::string("  stuck ") + e.what());
+    }
+  }
   return rep;
 }
 
