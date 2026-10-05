@@ -39,11 +39,24 @@ void Interp::whyChain(PropId p, int depth, Report& rep) const {
       head += "]";
     }
     rep.lines.push_back(head);
-    if (depth < 6)
+    if (depth < 6) {
       for (const Antecedent& a : r.antecedents) {
         rep.lines.push_back(pad + "  because " + w_.showProp(a.prop));
         whyChain(a.prop, depth + 2, rep);
       }
+      // A rule that was itself derived, not stated, has reasons of its own: show them, so a
+      // conclusion traces back to whatever made its rule hold.
+      auto lab = labels_.find(r.rule);
+      if (lab != labels_.end()) {
+        const auto& ruleReasons = w_.propReasons(lab->second);
+        bool derived = std::any_of(ruleReasons.begin(), ruleReasons.end(),
+                                   [](const Reason& x) { return !x.stipulated; });
+        if (derived) {
+          rep.lines.push_back(pad + "  using rule (" + r.rule + "), which holds because");
+          whyChain(lab->second, depth + 2, rep);
+        }
+      }
+    }
   }
 }
 
@@ -483,6 +496,8 @@ void Interp::exec(const Stmt& s, Report& rep) {
       if (!ok) ++rep.checksFailed;
       rep.lines.push_back(std::string(ok ? "  ok   " : "  FAIL ") + "line " +
                           std::to_string(s.line) + ": " + w_.showProp(s.prop));
+      // Naming adds nothing to the store: only a proposition that already holds gets a label.
+      if (ok) bind(s.label, s.prop);
       return;
     }
 

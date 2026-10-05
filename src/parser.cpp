@@ -773,6 +773,9 @@ Stmt Parser::statement() {
     s.kind = at("Therefore") ? StmtKind::Therefore : StmtKind::Why;
     take();
     s.prop = proposition();
+    // `Therefore A as (h).` names A when it holds, so a proposition that reached the store
+    // without a label (through Holds) can be used by label.
+    if (s.kind == StmtKind::Therefore && accept("as")) s.label = labelOpt();
     expect(".");
     return s;
   }

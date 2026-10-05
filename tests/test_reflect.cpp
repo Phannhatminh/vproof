@@ -127,8 +127,14 @@ int main() {
     const Object& o = w.obj(r1);
     check(o.kind == Kind::Tuple && o.elems.size() == 2, "a quantified representative is a two-part tuple");
     check(w.show(o.elems[0]) == "All", "the first part is the All tag");
-    check(w.show(o.elems[1]) == "(Mem, (Var, 0), A)",
-          "the body is represented too, with the bound variable as (Var, 0): " + w.show(o.elems[1]));
+    // Checked by structure, not by printing: a representative prints as its proposition.
+    const Object& body = w.obj(o.elems[1]);
+    const Object* var = body.elems.size() == 3 ? &w.obj(body.elems[1]) : nullptr;
+    check(body.kind == Kind::Tuple && body.elems.size() == 3 && w.obj(body.elems[0]).name == "Mem" &&
+              var && var->kind == Kind::Tuple && var->elems.size() == 2 &&
+              w.obj(var->elems[0]).name == "Var" && w.obj(var->elems[1]).name == "0" &&
+              body.elems[2] == A,
+          "the body is represented too, with the bound variable as (Var, 0)");
   }
 
   // --- Proof by contradiction with a quantified conclusion: runs to the end ---

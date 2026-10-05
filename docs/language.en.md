@@ -233,7 +233,17 @@ Why A.
 `Therefore` prints `ok` if the proposition holds and `FAIL` if not — and "does not hold"
 means nobody has said it, not that it is false. `Why` prints the reason tree: every node is
 either *stipulated at line n* or *derived by which rule, at which line, with which bindings,
-from which premises*.
+from which premises*. When the rule used was itself derived rather than stated, the tree also
+shows why that rule holds. A representative prints as its proposition in brackets, `[A]`.
+
+```
+Therefore A as (h).
+```
+
+names `A` when it holds, so it can be used by label — `By rule (h) …`, `Instantiate (h) …`.
+It adds nothing to the store; if `A` does not hold, the check fails and no label is made. This
+is how a proposition that reached the store without a label, through `Holds`, becomes usable
+(see *Propositions as objects*).
 
 ## Computation
 
@@ -328,6 +338,34 @@ Therefore t in S.
 
 A representative only comes into existence when it is named, so `[A]` must be written somewhere
 before a rule looks it up.
+
+A rule can reach the store by reasoning instead of being written: a rule about propositions
+puts `[A] in Holds`, and `A` follows. Such a rule has no label until `Therefore A as (h)` gives
+it one, and then it applies like any other. Here a sentence becomes policy only because of who
+said it:
+
+```v
+Let SoftwarePurchase, PolicyMaker be sets.
+Let MustGoThrough, Said be relations.
+Let ha, security, r1 be entities.
+
+Assume (said): (ha, [for every r, if r in SoftwarePurchase then (r, security) in MustGoThrough]) in Said.
+Rule (policy makers make policy): for every s, p, if (s, p) in Said and s in PolicyMaker then p in Holds.
+Assume (role): ha in PolicyMaker.
+
+By rule (policy makers make policy)
+    applied to (ha, [for every r, if r in SoftwarePurchase then (r, security) in MustGoThrough]),
+    it follows that [for every r, if r in SoftwarePurchase then (r, security) in MustGoThrough] in Holds.
+Therefore for every r, if r in SoftwarePurchase then (r, security) in MustGoThrough as (sec).
+
+Assume (r1 sw): r1 in SoftwarePurchase.
+By rule (sec) applied to (r1), it follows that (r1, security) in MustGoThrough.
+Therefore (r1, security) in MustGoThrough.
+Why (r1, security) in MustGoThrough.
+```
+
+Without `ha in PolicyMaker`, the step that puts the sentence into `Holds` does not go through —
+missing `ha ∈ PolicyMaker` — and the sentence stays something said, not a rule.
 
 ## Theories
 

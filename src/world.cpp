@@ -49,7 +49,16 @@ ObjectId World::numeral(const Rational& value) {
 }
 
 std::string World::show(ObjectId id) const {
-  return id == kNoObject ? "?" : objects_[id].name;
+  if (id == kNoObject) return "?";
+  // A proposition's representative prints as the proposition in brackets, wherever it sits.
+  if (auto it = propOf_.find(id); it != propOf_.end()) return "[" + showProp(it->second) + "]";
+  const Object& o = objects_[id];
+  if (o.kind == Kind::Tuple && !o.elems.empty()) {
+    std::string s = "(";
+    for (size_t i = 0; i < o.elems.size(); ++i) s += (i ? ", " : "") + show(o.elems[i]);
+    return s + ")";
+  }
+  return o.name;
 }
 
 Cell& World::cellFor(CellKey k) { return cells_[k]; }
@@ -655,6 +664,8 @@ void World::syncFromHolds(ObjectId rep, const Reason& base) {
   if (it == propOf_.end()) return;
   if (holds(it->second)) return;
   Reason why = Reason::derive("holds", base.line);
+  // Points back at `[A] ∈ Holds`, so the reason tree goes on to whatever put A there.
+  why.antecedents = {Antecedent{atom(Term::of(rep), Term::of(holds_), true)}};
   tell(it->second, std::move(why));
 }
 

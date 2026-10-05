@@ -653,6 +653,28 @@ Và xa hơn: **định lý về lời giải** viết được. Luật nói về
 thường, áp bằng đúng một thao tác, có lý do, đọc ngược được. Cái mà các hệ khác đặt ở một
 siêu ngôn ngữ riêng bên ngoài logic, ở đây nằm trong cùng thế giới.
 
+### Luật đến từ lập luận
+
+Ghi 2026-10-04, nhánh `contour`.
+
+Một luật không nhất thiết được viết ra. Luật về mệnh đề có thể đặt `[A] ∈ Holds`, và `A` vào
+kho theo đường đồng bộ — ví dụ một câu trở thành chính sách vì người nói ra nó có thẩm quyền:
+từ `(ha, [A]) ∈ Said` và `ha ∈ PolicyMaker` suy ra `[A] ∈ Holds`. Thiếu thẩm quyền thì bước đó
+kẹt đúng ở tiền đề còn thiếu, và câu nói vẫn chỉ là một điều được nói.
+
+Ba điều để luật như vậy dùng được:
+
+- **Đặt tên.** Áp luật cần nhãn, mà nhãn chỉ gắn lúc một câu tạo ra mệnh đề; mệnh đề vào kho
+  qua `Holds` không qua câu nào nên không có nhãn. `Therefore A as (h)` gắn nhãn cho `A` khi
+  `A` đang có. Nó không thêm gì vào kho và không suy luận gì — chỉ đặt tên cho thứ đã được
+  lập luận ra; `A` không có thì không có nhãn.
+- **Lý do đi tiếp.** Lý do "holds" của `A` trỏ về `[A] ∈ Holds`, nên cây lý do đi tiếp tới
+  những gì đã đặt `[A]` vào đó, thay vì dừng ở "holds".
+- **Lý do của luật.** Khi một bước dùng luật mà luật đó là suy ra, `Why` in thêm vì sao luật đó
+  đang có. Một kết luận vì thế truy được tới tận người nói và thẩm quyền của họ.
+
+Đại diện được in thành `[A]` thay vì tuple thô, để cây lý do đọc được.
+
 ### Cái phải trả
 
 Đây là một diện tích tin cậy mới, cùng loại với việc tin số học của máy nhưng lớn hơn nhiều:

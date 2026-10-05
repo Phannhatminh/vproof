@@ -229,7 +229,18 @@ Why A.
 
 `Therefore` in `ok` nếu mệnh đề đang có, `FAIL` nếu không — và "không có" nghĩa là chưa ai nói,
 không nghĩa là sai. `Why` in cây lý do: mỗi nút là *đặt ra ở dòng n* hoặc *suy ra bằng luật
-nào, dòng nào, thế gì, từ những tiền đề nào*.
+nào, dòng nào, thế gì, từ những tiền đề nào*. Khi luật được dùng là luật suy ra chứ không phải
+được đặt ra, cây in thêm vì sao luật đó đang có. Đại diện được in thành mệnh đề trong ngoặc
+vuông, `[A]`.
+
+```
+Therefore A as (h).
+```
+
+đặt tên cho `A` khi `A` đang có, để dùng được bằng nhãn — `By rule (h) …`, `Instantiate (h) …`.
+Câu này không thêm gì vào kho; nếu `A` không có thì kiểm tra `FAIL` và không có nhãn nào được
+tạo. Đây là cách một mệnh đề vào kho mà không có nhãn — qua `Holds` — trở nên dùng được (xem
+*Mệnh đề là đối tượng*).
 
 ## Tính toán
 
@@ -322,6 +333,34 @@ Therefore t in S.
 ```
 
 Đại diện chỉ sinh ra khi được gọi tên, nên phải viết `[A]` ra ở đâu đó trước khi luật tra nó.
+
+Một luật có thể vào kho bằng lập luận thay vì được viết ra: một luật về mệnh đề đặt `[A] in
+Holds`, và `A` theo sau. Luật như vậy không có nhãn cho tới khi `Therefore A as (h)` đặt tên
+cho nó, rồi áp được như mọi luật khác. Ở đây một câu nói trở thành chính sách chỉ vì ai đã nói
+nó:
+
+```v
+Let SoftwarePurchase, PolicyMaker be sets.
+Let MustGoThrough, Said be relations.
+Let ha, security, r1 be entities.
+
+Assume (said): (ha, [for every r, if r in SoftwarePurchase then (r, security) in MustGoThrough]) in Said.
+Rule (policy makers make policy): for every s, p, if (s, p) in Said and s in PolicyMaker then p in Holds.
+Assume (role): ha in PolicyMaker.
+
+By rule (policy makers make policy)
+    applied to (ha, [for every r, if r in SoftwarePurchase then (r, security) in MustGoThrough]),
+    it follows that [for every r, if r in SoftwarePurchase then (r, security) in MustGoThrough] in Holds.
+Therefore for every r, if r in SoftwarePurchase then (r, security) in MustGoThrough as (sec).
+
+Assume (r1 sw): r1 in SoftwarePurchase.
+By rule (sec) applied to (r1), it follows that (r1, security) in MustGoThrough.
+Therefore (r1, security) in MustGoThrough.
+Why (r1, security) in MustGoThrough.
+```
+
+Thiếu `ha in PolicyMaker` thì bước đưa câu nói vào `Holds` không đi được — thiếu
+`ha ∈ PolicyMaker` — và câu nói vẫn chỉ là một điều được nói, chưa phải luật.
 
 ## Lý thuyết
 
