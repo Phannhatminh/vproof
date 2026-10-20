@@ -84,10 +84,14 @@ Prover::Result Prover::introExists(PropId instance, ObjectId witness,
                                    const std::string& name, int line) {
   if (!w_.holds(instance)) return missing(instance);
 
-  // Abstraction: every mention of the witness becomes the variable of a new binder.
+  // Abstraction: every mention of the witness becomes the variable of a new binder. If that
+  // proposition is already in the store, what was made for the new variable is removed.
+  Mark m = w_.mark();
+  size_t before = w_.propCount();
   ObjectId var = w_.variable(name);
   PropId body = w_.substitute(instance, witness, var, line);
   PropId out = w_.exists(var, body);
+  if (out < before) w_.rollback(m);
   Reason why = Reason::derive("exists", line);
   why.antecedents = {Antecedent{instance}};
   w_.tell(out, std::move(why));

@@ -204,7 +204,14 @@ Term Parser::atomTerm() {
 // object in place of x.
 ObjectId Parser::applyTerm(const Term& fnTerm, const Term& argTerm, int line) {
   ObjectId fn = w_.resolve(fnTerm), a = w_.resolve(argTerm);
-  if (w_.obj(fn).open || w_.obj(a).open) return w_.apply(fn, a, line);
+  if (w_.obj(fn).open || w_.obj(a).open) {
+    // F(x) is written only where `x ∈ Domain(F)` is assumed — the same check as for F(a).
+    try {
+      return w_.apply(fn, a, line, false, checkApply_ ? &assumed_ : nullptr);
+    } catch (const Unapplied& e) {
+      err("`" + w_.show(fn) + "(" + w_.show(a) + ")` cannot be written here — " + e.what());
+    }
+  }
   ObjectId value = w_.appliedValue(fn, a);
   if (value == kNoObject && makeValues_) value = w_.apply(fn, a, line);
   if (value == kNoObject)
@@ -285,7 +292,17 @@ PropId Parser::andLevel() {
   PropId left = primary();
   while (at("and")) {
     take();
-    left = w_.conj(left, primary());
+    // The left side is assumed while reading the right: `x in Domain(F) and F(x) in S`.
+    assumed_.push_back(left);
+    PropId right;
+    try {
+      right = primary();
+    } catch (...) {
+      assumed_.pop_back();
+      throw;
+    }
+    assumed_.pop_back();
+    left = w_.conj(left, right);
   }
   return left;
 }
@@ -358,7 +375,21 @@ PropId Parser::tryNotation() {
   return best;
 }
 
+// A binder whose proposition is already in the store — the same rule written again, maybe
+// with other variable names — made a variable object, F(z) with it, and parts nobody uses.
+// Rolling back to before the binder removes them; everything the proposition itself
+// mentions existed before, so nothing it needs goes.
 PropId Parser::primary() {
+  bool binder = (at("for") && peek(1).text == "every") || (at("there") && peek(1).text == "exists");
+  if (!binder) return primaryInner();
+  Mark m = w_.mark();
+  size_t before = w_.propCount();
+  PropId out = primaryInner();
+  if (out < before) w_.rollback(m);
+  return out;
+}
+
+PropId Parser::primaryInner() {
   if (!notations_.empty() && !at("(")) {
     PropId got = tryNotation();
     if (got != kNoProp) return got;
@@ -797,15 +828,27 @@ Stmt Parser::statement() {
     // A hole is a variable of the template: a variable object, free in the right-hand side.
     // So the right-hand side can be anything a proposition can be — quantifiers, F(X).
     size_t rhs = pos_;
+    // Pass one only finds the holes; what it makes is removed once that is known.
+    Mark passOne = w_.mark();
     holeNames_ = words;
     holeVars_.clear();
     for (const std::string& word : words) holeVars_.push_back(w_.variable(word));
-    PropId first = proposition();
+    // Pass one only finds the holes; F(X) is checked in pass two, against the `where`.
+    checkApply_ = false;
+    PropId first;
+    try {
+      first = proposition();
+    } catch (...) {
+      checkApply_ = true;
+      throw;
+    }
+    checkApply_ = true;
 
     const std::vector<ObjectId>& free = w_.prop(first).freeVars;
     std::vector<bool> used(words.size(), false);
     for (size_t i = 0; i < words.size(); ++i)
       used[i] = std::binary_search(free.begin(), free.end(), holeVars_[i]);
+    w_.rollback(passOne);
 
     holeNames_.clear();
     holeVars_.clear();
@@ -819,23 +862,48 @@ Stmt Parser::statement() {
       }
     }
 
-    pos_ = rhs;
-    n.tmpl = proposition();
-    n.holeVars = holeVars_;
-
-    // `where A in Vectors, B in Vectors` — overload resolution guards.
-    if (accept("where")) {
-      do {
-        std::string hole = take().text;
-        expect("in");
-        ObjectId set = lookup(take().text);
-        size_t idx = holeNames_.size();
-        for (size_t i = 0; i < holeNames_.size(); ++i)
-          if (holeNames_[i] == hole) idx = i;
-        if (idx == holeNames_.size()) err("`" + hole + "` is not a hole of the template");
-        n.guards.push_back({idx, set});
-      } while (accept(","));
+    // `where A in Vectors, B in Vectors` — overload resolution guards. They are what is
+    // assumed about the holes, so they are read before the right-hand side: F(X) there needs
+    // `X in Domain(F)` among them.
+    std::vector<PropId> whereProps;
+    size_t end = pos_;
+    {
+      size_t k = rhs;
+      int depth = 0;
+      while (k < toks_.size() && !(depth == 0 && (toks_[k].text == "where" || toks_[k].text == "."))) {
+        if (toks_[k].text == "(" || toks_[k].text == "[") ++depth;
+        if (toks_[k].text == ")" || toks_[k].text == "]") --depth;
+        ++k;
+      }
+      if (k < toks_.size() && toks_[k].text == "where") {
+        pos_ = k + 1;
+        do {
+          std::string hole = take().text;
+          expect("in");
+          Term setTerm = term();
+          ObjectId set = w_.resolve(setTerm);
+          size_t idx = holeNames_.size();
+          for (size_t i = 0; i < holeNames_.size(); ++i)
+            if (holeNames_[i] == hole) idx = i;
+          if (idx == holeNames_.size()) err("`" + hole + "` is not a hole of the template");
+          n.guards.push_back({idx, set});
+          whereProps.push_back(w_.atom(Term::of(holeVars_[idx]), Term::of(set), true));
+        } while (accept(","));
+        end = pos_;
+      }
     }
+
+    pos_ = rhs;
+    assumed_.insert(assumed_.end(), whereProps.begin(), whereProps.end());
+    try {
+      n.tmpl = proposition();
+    } catch (...) {
+      assumed_.resize(assumed_.size() - whereProps.size());
+      throw;
+    }
+    assumed_.resize(assumed_.size() - whereProps.size());
+    n.holeVars = holeVars_;
+    if (at("where")) pos_ = end;
     expect(".");
     holeNames_.clear();
     holeVars_.clear();

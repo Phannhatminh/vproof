@@ -110,6 +110,27 @@ int main(int argc, char** argv) {
   runFile(dir + "/rulefn.v", 6);
   runFile(dir + "/forms.v", 12);
 
+  // A rule written again with other variable names is the proposition already stored; what
+  // reading it made — its variable, F(z) — is removed, so the object store does not grow.
+  {
+    const std::string base =
+        "Let F be a map.\n"
+        "Let Pos be a set.\n"
+        "Apply Domain to F.\n"
+        "Rule (pos): for every x, if x in Domain(F) then F(x) in Pos.\n";
+    Interp once, twice;
+    once.run(base);
+    auto rep = twice.run(base +
+                         "Therefore for every z, if z in Domain(F) then F(z) in Pos.\n"
+                         "Therefore if (for every z, if z in Domain(F) then F(z) in Pos) then "
+                         "(for every z, if z in Domain(F) then F(z) in Pos).\n");
+    bool ok = rep.checksRun == 2 && rep.checksFailed == 1 &&
+              once.world().objectCount() == twice.world().objectCount();
+    std::cout << (ok ? "ok    " : "FAIL  ")
+              << "restating a rule with other names leaves no objects behind\n";
+    if (!ok) ++failures;
+  }
+
   // A cell nobody has spoken about checks as neither polarity — which is not the same as
   // "false".
   {
@@ -183,7 +204,7 @@ int main(int argc, char** argv) {
               "Let a be an entity.\n"
               "Let P be a set.\n"
               "Apply Domain to F.\n"
-              "Rule (r): for every x, F(x) in P.\n"
+              "Rule (r): for every x in Domain(F), F(x) in P.\n"
               "By rule (r) applied to (a), it follows that F(a) in P.\n",
               "step does not go through, missing: a ∈ Domain(F)");
 
@@ -193,9 +214,28 @@ int main(int argc, char** argv) {
               "Let P be a set.\n"
               "Apply Domain to F.\n"
               "Assume (h): a in Domain(F).\n"
-              "Rule (r): for every x, F(x) in P.\n"
+              "Rule (r): for every x in Domain(F), F(x) in P.\n"
               "Therefore F(a) in P.\n",
               "does not exist yet — needs `Apply F to");
+
+  expectError("F(x) in a rule where x is not assumed to be in the domain",
+              "Let F be a map.\n"
+              "Let P be a set.\n"
+              "Apply Domain to F.\n"
+              "Rule (r): for every x, F(x) in P.\n",
+              "cannot be written here — not established: `x in Domain(F)`");
+
+  expectError("Domain(f) for a variable f not assumed to be a map",
+              "Let P be a set.\n"
+              "Rule (r): for every f, y, if y in Domain(f) then f(y) in P.\n",
+              "cannot be written here — not established: `f in MAP`");
+
+  expectError("the right side of `or` does not see the left side",
+              "Let F be a map.\n"
+              "Let P be a set.\n"
+              "Apply Domain to F.\n"
+              "Rule (r): for every x, x in Domain(F) or F(x) in P.\n",
+              "cannot be written here");
 
   expectError("applying a function before the argument is known to be in the domain",
               "Let F be a map.\n"

@@ -323,7 +323,12 @@ Therefore (a, F(a)) in F.
 ```
 
 Inside a rule, `F(x)` with `x` a rule variable can be written: a variable is an object, so
-`F(x)` is an object too. Applying the rule to `a` turns `F(x)` into `F(a)`. If `F(a)` does not
+`F(x)` is an object too. It goes through the same check as `F(a)`: `x ∈ Domain(F)` has to be
+established where it is written. For a variable, established means assumed around it — the
+`in Domain(F)` of its binder, the enclosing `if`, or the left side of an `and` before it.
+Without that the rule cannot be written. `Domain(f)` with `f` a variable is the same, and needs
+`f ∈ MAP` (since `Domain(Domain)` is `MAP`). The right side of `or` does not see the left side.
+Applying the rule to `a` turns `F(x)` into `F(a)`. If `F(a)` does not
 exist yet, the rule step makes it the way `Apply F to a` does, checking `a ∈ Domain(F)`; if the
 check fails the step does not go through, and what is missing is `a ∈ Domain(F)`.
 
@@ -439,7 +444,8 @@ Therefore (alice, carol) in Boss.
 
 Template words used by the right-hand side are holes; the others are fixed words. A hole is
 a variable of the template, so the right-hand side is any proposition — with quantifiers, with
-`F(X)`. The names in it are resolved to objects when the notation is declared — so a rule
+`F(X)`; `F(X)` needs `X in Domain(F)` among the `where`, since `where` is what is assumed about
+the holes. After the `in` of `where` comes any term. The names in it are resolved to objects when the notation is declared — so a rule
 variable cannot capture them. Two templates with the same shape are told apart with
 `where A in Vectors, B in Vectors`. A concrete filler is looked up in the matrix; a variable is
 looked up in what is assumed about it where the notation is used — the enclosing `if`, or the

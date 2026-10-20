@@ -58,6 +58,7 @@ class Parser {
   PropId orLevel();
   PropId andLevel();
   PropId primary();
+  PropId primaryInner();
   Term term();       // + -
   Term mulLevel();   // * /
   Term powLevel();   // ^
@@ -95,12 +96,15 @@ class Parser {
   std::vector<Notation> notations_;
   std::vector<std::string> holeNames_;  // open while parsing a Notation right-hand side
   std::vector<ObjectId> holeVars_;      // the variable of each of those holes
-  // What is assumed where the parser is: the `if` parts around, and the `in S` of the
-  // binders around. Notation guards on a variable look here.
+  // What is assumed where the parser is: the `if` parts around, the left sides of `and`
+  // before it, the `in S` of the binders around, the `where` of a Notation. Notation guards
+  // on a variable look here, and so does the domain check of F(x).
   std::vector<PropId> assumed_;
   // While reading the conclusion of `By rule`: F(a) with no value yet is made there, the
   // same as applying the rule makes it.
   bool makeValues_ = false;
+  // Off only while reading a Notation template the first time, to find its holes.
+  bool checkApply_ = true;
 };
 
 }  // namespace v

@@ -189,7 +189,15 @@ class World {
   //
   // A value can exist without `(a, F(a)) ∈ F`: one made inside a scope that has closed.
   // `establish` asks for that fact too, with the same domain check — what `Apply` does.
-  ObjectId apply(ObjectId fn, ObjectId arg, int line, bool establish = false);
+  //
+  // `context` is what is assumed where F(x) is written: the `if` part around it, the left
+  // side of an `and` before it, the `in S` of its binders. Given one, F(x) with a variable
+  // gets the same check as F(a): `x ∈ Domain(F)` has to be established, here by being
+  // assumed — and Domain(f), for a variable f, needs `f ∈ Domain(Domain)` the same way.
+  ObjectId apply(ObjectId fn, ObjectId arg, int line, bool establish = false,
+                 const std::vector<PropId>* context = nullptr);
+  // Whether `subject ∈ column` is told in the matrix, or is one of the assumptions.
+  bool established(ObjectId subject, ObjectId column, const std::vector<PropId>* context);
   // Which object is `Domain`. Declared by the prelude, so it is handed over once that runs.
   void setDomain(ObjectId domain) { domain_ = domain; }
 
@@ -242,8 +250,11 @@ class World {
   ObjectId represent(PropId id, std::vector<ObjectId>& ctx);
   // Read a representative off its shape: (Mem, t, S), (And, a, b), (All, a) with `(Var, k)`
   // inside, (App, F, x), … — the proposition it stands for, or kNoProp if it is not one.
-  PropId decode(ObjectId rep, std::vector<ObjectId>& ctx);
-  bool decodeTerm(ObjectId o, std::vector<ObjectId>& ctx, ObjectId& out);
+  // `assumed` is what the shape assumes around the part being read, so F(x) inside it is
+  // checked the way the parser checks it.
+  PropId decode(ObjectId rep, std::vector<ObjectId>& ctx, std::vector<PropId>& assumed);
+  bool decodeTerm(ObjectId o, std::vector<ObjectId>& ctx, std::vector<PropId>& assumed,
+                  ObjectId& out);
   ObjectId representTerm(const Term& t, const std::vector<ObjectId>& ctx);
   ObjectId representObj(ObjectId o, const std::vector<ObjectId>& ctx);
 

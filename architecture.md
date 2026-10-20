@@ -192,7 +192,12 @@ ghi, và lỗi chỉ đúng chỗ thiếu. Nhắc `F(a)` ở bất cứ đâu tr
 không đi được.
 
 Biến của luật là object, nên `F(x)` với `x` là biến của luật cũng là một object: đối tượng mà
-luật nói tới. Không fact nào được ghi về nó. Áp luật cho `a` thì `F(x)` thành `F(a)`: có rồi thì
+luật nói tới. Không fact nào được ghi về nó. Viết `F(x)` đi qua đúng phép kiểm như `F(a)`:
+`x ∈ Domain(F)` phải đã xác lập. Với `a` cụ thể thì tra ô trong ma trận; với biến thì tra những
+gì được giả sử ở chỗ viết — `in S` của binder, phần `if` bao quanh, vế trái của `and` đứng
+trước, `where` của Notation. Không có thì luật không viết được. `Domain(f)` với `f` là biến đi
+cùng phép kiểm đó một bậc lên, cần `f ∈ Domain(Domain)`, tức `f ∈ MAP`. Đại diện viết vào
+`Holds` dạng tuple cũng được đọc lại với phép kiểm này. Áp luật cho `a` thì `F(x)` thành `F(a)`: có rồi thì
 dùng, chưa có thì bước áp luật tạo ra nó đúng như `Apply F to a`, có kiểm `a ∈ Domain(F)`.
 Kiểm không qua thì bước không đi qua, và thứ thiếu là `a ∈ Domain(F)`. Kết luận nêu trong
 chính câu `By rule ...` cũng được tạo `F(a)` theo cách đó. Lấy nhân chứng ra khỏi
@@ -606,6 +611,12 @@ mệnh đề chỉ khác ở object biến mà chúng buộc là cùng một m�
 trùng. `F(x)` viết thành `(App, F, x)`, với `x` viết như trên. Nhìn vào là đọc được hình dạng,
 vì tuple đọc được.
 
+Viết lại một mệnh đề đã có trong kho, kể cả bằng tên biến khác, thì kho trả về mệnh đề cũ.
+Object biến mới và những gì dựng từ nó (`F(z)`, tuple chứa `z`) không mệnh đề nào dùng, nên
+đọc xong binder đó là rollback về trước nó và chúng bị gỡ. Mọi thứ mệnh đề cũ nhắc tới đều có
+từ trước, nên không mất gì nó cần. Đọc lại đại diện từ `Holds`, lấy `there exists` từ một
+nhân chứng, và lượt đọc đầu của Notation cũng dọn theo cách đó.
+
 Trong nguồn, `[A]` là đại diện của mệnh đề `A`, và `[(h)]` là đại diện của mệnh đề mang nhãn
 `h`. Viết nó ra chính là hành động làm nó sinh ra.
 
@@ -958,8 +969,8 @@ Notation: "A manages B" means (A, B) in Boss.
 ```
 
 Notation là cách viết, không phải cơ chế: dùng ở chỗ nào một mệnh đề đứng được, kể cả bên
-trong luật với biến của luật ngồi trong lỗ, và nó mở ra đúng một mệnh đề. Vế phải không chứa
-lượng từ.
+trong luật với biến của luật ngồi trong lỗ, và nó mở ra đúng một mệnh đề. Lỗ là biến của
+mẫu, nên vế phải là mệnh đề bất kỳ, có lượng từ, có `F(X)`.
 
 Chữ nào trong mẫu là lỗ thì phải đọc vế phải mới biết, nên parser đọc hai lượt: lượt một coi
 mọi chữ là lỗ và xem vế phải dùng chữ nào; lượt hai đọc lại với đúng những chữ đó. Chữ
@@ -967,8 +978,8 @@ không được dùng là chữ cố định.
 
 **Hygiene.** Vế phải quy về đối tượng ngay lúc khai báo: `Boss` thành một `ObjectId`, không
 còn là tên. Chỗ dùng chỉ điền term vào lỗ, không tra tên nào, nên biến của một luật trùng
-tên với `Boss` không bắt được nó. Đây là đúng chỗ bản v0.3 hỏng. Lỗ là một loại term riêng,
-không phải object, nên không lẫn với biến của luật.
+tên với `Boss` không bắt được nó. Đây là đúng chỗ bản v0.3 hỏng. Mỗi lỗ là một object biến
+riêng của mẫu, nên không lẫn với biến của luật.
 
 **Quá tải.** Hai mẫu cùng hình dạng phân biệt bằng `where`:
 
@@ -981,6 +992,10 @@ Dài nhất thắng; hai mẫu cùng khớp cùng độ dài mà không phân bi
 chọn bừa. Chỗ điền là đối tượng cụ thể thì `where` tra trong ma trận; là biến thì tra những gì
 đã giả sử về biến đó ở chỗ dùng — phần `if` bao quanh, hoặc `in S` của binder. Không có giả sử
 nào về nó thì `where` không lọc được.
+
+`where` cũng là những gì giả sử về lỗ ở vế phải, nên parser đọc nó trước vế phải. `F(X)` trong
+vế phải cần `X in Domain(F)` trong `where`, đúng phép kiểm như `F(x)` trong luật. Sau `in` của
+`where` là term bất kỳ.
 
 ## Quan hệ và nhãn của cơ chế
 

@@ -22,13 +22,14 @@ Take x with x in Domain(F) {
 Hence (all dom): for every x, if x in Domain(F) then x in T.
 
 -- Several arguments, a function value applied again, and t[i].
-Rule (pairs): for every x, y, F(x, y) in T.
-Therefore for every u, v, F((u, v)) in T.
+Rule (pairs): for every x, y, if (x, y) in Domain(F) then F(x, y) in T.
+Therefore for every u, v, if (u, v) in Domain(F) then F((u, v)) in T.
 Assume (m): F(a) in MAP.
 Apply Domain to F(a).
 Assume (hab): b in Domain(F(a)).
 Apply F(a) to b.
-Rule (curried): for every x, y, F(x)(y) in T.
+Rule (curried): for every x, y,
+    if x in Domain(F) and F(x) in MAP and y in Domain(F(x)) then F(x)(y) in T.
 By rule (curried) applied to (a, b), it follows that F(a)[b] in T.
 Therefore F(a)(b) in T.
 
@@ -50,12 +51,13 @@ Therefore (t, (a, (b, c))) in Defined.
 Assume (named): (n, "Alice Nguyen") in R.
 Therefore (n, "Alice Nguyen") in R.
 
--- Notation with quantifiers and F(X); `where` on variables, from what is assumed.
+-- Notation with quantifiers and F(X); `where` on variables, from what is assumed. F(X) in a
+-- template needs `X in Domain(F)` among its `where`.
 Notation: "all of X are in Y" means for every z, if z in X then z in Y.
 Assume (sub): all of A are in B.
 By rule (sub) applied to (b), it follows that b in B.
 Therefore b in B.
-Notation: "img X" means F(X) in T.
+Notation: "img X" means F(X) in T where X in Domain(F).
 Assume (img): img a.
 Therefore F(a) in T.
 Notation: "X plus Y is Z" means (X, Y, Z) in VecSum where X in Vectors, Y in Vectors.

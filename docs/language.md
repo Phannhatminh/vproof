@@ -319,7 +319,11 @@ Therefore (a, F(a)) in F.
 ```
 
 Trong luật, `F(x)` với `x` là biến của luật viết được: biến là object, nên `F(x)` cũng là
-object. Áp luật cho `a` thì `F(x)` thành `F(a)`. Nếu `F(a)` chưa có, bước áp luật tạo ra nó
+object. Nó đi qua đúng phép kiểm như `F(a)`: `x ∈ Domain(F)` phải đã xác lập ở chỗ viết. Với
+biến, xác lập nghĩa là được giả sử quanh đó — `in Domain(F)` của binder, phần `if` bao quanh,
+hoặc vế trái của `and` đứng trước. Không có thì luật không viết được. `Domain(f)` với `f` là
+biến cũng vậy, cần `f ∈ MAP` (vì `Domain(Domain)` là `MAP`). Vế phải của `or` không thấy vế
+trái. Áp luật cho `a` thì `F(x)` thành `F(a)`. Nếu `F(a)` chưa có, bước áp luật tạo ra nó
 như `Apply F to a`, có kiểm `a ∈ Domain(F)`; kiểm không qua thì bước không đi qua, và thứ
 thiếu là `a ∈ Domain(F)`.
 
@@ -433,7 +437,8 @@ Therefore (alice, carol) in Boss.
 ```
 
 Chữ trong mẫu mà vế phải dùng tới là lỗ; chữ còn lại là chữ cố định. Lỗ là biến của mẫu, nên
-vế phải là mệnh đề bất kỳ — có lượng từ, có `F(X)` cũng được. Tên trong vế phải được quy về đối
+vế phải là mệnh đề bất kỳ — có lượng từ, có `F(X)` cũng được; `F(X)` cần `X in Domain(F)`
+trong `where`, vì `where` là những gì giả sử về lỗ. Sau `in` của `where` là term bất kỳ. Tên trong vế phải được quy về đối
 tượng ngay lúc khai báo — nên không bị biến của luật bắt mất. Hai mẫu cùng hình dạng phân biệt
 bằng `where A in Vectors, B in Vectors`. Chỗ điền là đối tượng cụ thể thì tra trong ma trận;
 là biến thì tra những gì đã giả sử về nó ở chỗ dùng — phần `if` bao quanh, hoặc `in S` của

@@ -572,13 +572,44 @@ ObjectId World::makeValue(ObjectId fn, ObjectId arg, bool open) {
   return value;
 }
 
-ObjectId World::apply(ObjectId fn, ObjectId arg, int line, bool establish) {
+bool World::established(ObjectId subject, ObjectId column, const std::vector<PropId>* context) {
+  if (toldIn(subject, column)) return true;
+  if (!context) return false;
+  for (PropId a : *context)
+    for (PropId q : premisesOf(a)) {
+      const Prop& p = props_[q];
+      if (p.kind != PropKind::Atom || !p.positive) continue;
+      Term s = p.subject, c = p.column;
+      if (resolve(s) == subject && resolve(c) == column) return true;
+    }
+  return false;
+}
+
+ObjectId World::apply(ObjectId fn, ObjectId arg, int line, bool establish,
+                      const std::vector<PropId>* context) {
+  bool open = objects_[fn].open || objects_[arg].open;
+  if (open && context) {
+    // Written in a rule: the same domain check as for F(a), against what is assumed there.
+    // Domain(F) for a concrete F is the value already made; for a variable f it is Domain(f),
+    // checked in turn.
+    if (domain_ == kNoObject) throw Unapplied("`Domain` is not defined", kNoProp);
+    ObjectId dom = objects_[fn].open ? apply(domain_, fn, line, false, context)
+                                     : appliedValue(domain_, fn);
+    if (dom == kNoObject)
+      throw Unapplied("Domain(" + show(fn) + ") does not exist yet — needs `Apply Domain to " +
+                          show(fn) + ".` first",
+                      kNoProp);
+    if (!established(arg, dom, context))
+      throw Unapplied("not established: `" + show(arg) + " in " + show(dom) + "`",
+                      atom(Term::of(arg), Term::of(dom), true));
+  }
+
   ObjectId have = appliedValue(fn, arg);
   if (have != kNoObject && (!establish || toldIn(tuple({arg, have}), fn))) return have;
 
   // F(x) with x a variable is an object too: the one a rule speaks of. Nothing is stated
   // about it; putting an object in place of x turns it into that object's value.
-  if (objects_[fn].open || objects_[arg].open) return makeValue(fn, arg, true);
+  if (open) return makeValue(fn, arg, true);
 
   // Function application is not a mechanism operation. In meaning it is a domain lookup
   // followed by taking a witness; here it is done directly, with the domain check being
@@ -1015,7 +1046,8 @@ static bool isTag(const std::map<std::string, ObjectId>& tags, ObjectId o, const
   return t != tags.end() && t->second == o;
 }
 
-bool World::decodeTerm(ObjectId o, std::vector<ObjectId>& ctx, ObjectId& out) {
+bool World::decodeTerm(ObjectId o, std::vector<ObjectId>& ctx, std::vector<PropId>& assumed,
+                       ObjectId& out) {
   const Object& ob = objects_[o];
   if (ob.kind != Kind::Tuple) {
     out = o;
@@ -1033,19 +1065,23 @@ bool World::decodeTerm(ObjectId o, std::vector<ObjectId>& ctx, ObjectId& out) {
   if (e.size() == 3 && isTag(tags_, e[0], "App")) {
     // Only F(x) with a variable is written (App, F, x); a concrete F(a) is the value object.
     ObjectId fn, arg;
-    if (!decodeTerm(e[1], ctx, fn) || !decodeTerm(e[2], ctx, arg)) return false;
+    if (!decodeTerm(e[1], ctx, assumed, fn) || !decodeTerm(e[2], ctx, assumed, arg)) return false;
     if (!objects_[fn].open && !objects_[arg].open) return false;
-    out = apply(fn, arg, 0);
+    try {
+      out = apply(fn, arg, 0, false, &assumed);
+    } catch (const Unapplied&) {
+      return false;  // `x ∈ Domain(F)` is not assumed around it: not a proposition
+    }
     return true;
   }
   std::vector<ObjectId> parts(e.size());
   for (size_t i = 0; i < e.size(); ++i)
-    if (!decodeTerm(e[i], ctx, parts[i])) return false;
+    if (!decodeTerm(e[i], ctx, assumed, parts[i])) return false;
   out = tuple(parts);
   return true;
 }
 
-PropId World::decode(ObjectId rep, std::vector<ObjectId>& ctx) {
+PropId World::decode(ObjectId rep, std::vector<ObjectId>& ctx, std::vector<PropId>& assumed) {
   auto it = propOf_.find(rep);
   if (it != propOf_.end()) return it->second;
   const Object& ob = objects_[rep];
@@ -1054,13 +1090,17 @@ PropId World::decode(ObjectId rep, std::vector<ObjectId>& ctx) {
   auto is = [&](const char* name) { return isTag(tags_, e[0], name); };
   if ((is("Mem") || is("NotMem")) && e.size() == 3) {
     ObjectId s, c;
-    if (!decodeTerm(e[1], ctx, s) || !decodeTerm(e[2], ctx, c)) return kNoProp;
+    if (!decodeTerm(e[1], ctx, assumed, s) || !decodeTerm(e[2], ctx, assumed, c)) return kNoProp;
     return atom(Term::of(s), Term::of(c), is("Mem"));
   }
   if ((is("And") || is("Or") || is("Implies") || is("Iff")) && e.size() == 3) {
-    PropId a = decode(e[1], ctx);
+    PropId a = decode(e[1], ctx, assumed);
     if (a == kNoProp) return kNoProp;
-    PropId b = decode(e[2], ctx);
+    // The left side of `if … then` and of `and` is assumed while reading the right side.
+    bool carries = is("And") || is("Implies");
+    if (carries) assumed.push_back(a);
+    PropId b = decode(e[2], ctx, assumed);
+    if (carries) assumed.pop_back();
     if (b == kNoProp) return kNoProp;
     if (is("And")) return conj(a, b);
     if (is("Or")) return disj(a, b);
@@ -1068,16 +1108,22 @@ PropId World::decode(ObjectId rep, std::vector<ObjectId>& ctx) {
     return iff(a, b);
   }
   if (is("Not") && e.size() == 2) {
-    PropId a = decode(e[1], ctx);
+    PropId a = decode(e[1], ctx, assumed);
     return a == kNoProp ? kNoProp : neg(a);
   }
   if ((is("All") || is("Ex")) && e.size() == 2) {
+    // As in the parser: a proposition already in the store leaves its new variable unused,
+    // so what was made for it is removed.
+    Mark m = mark();
+    size_t before = props_.size();
     ObjectId var = variable("x");
     ctx.insert(ctx.begin(), var);
-    PropId body = decode(e[1], ctx);
+    PropId body = decode(e[1], ctx, assumed);
     ctx.erase(ctx.begin());
     if (body == kNoProp) return kNoProp;
-    return is("All") ? forAll(var, body) : exists(var, body);
+    PropId out = is("All") ? forAll(var, body) : exists(var, body);
+    if (out < before) rollback(m);
+    return out;
   }
   return kNoProp;
 }
@@ -1102,7 +1148,8 @@ void World::syncFromHolds(ObjectId rep, const Reason& base) {
     // Not paired yet. It may still be a representative by its shape — written as a tuple,
     // or built by a rule — and then pairing it now stores what it stands for.
     std::vector<ObjectId> ctx;
-    PropId p = decode(rep, ctx);
+    std::vector<PropId> assumed;
+    PropId p = decode(rep, ctx, assumed);
     if (p != kNoProp && props_[p].freeVars.empty()) represent(p);  // catches up if it is `rep`
     return;
   }
