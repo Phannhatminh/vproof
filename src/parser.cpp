@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <functional>
+#include <memory>
 
 namespace v {
 
@@ -108,6 +109,12 @@ ObjectId Parser::lookup(const std::string& name) {
   return it->second;
 }
 
+ObjectId Parser::lookupObject(const std::string& name) {
+  for (const auto& [n, var] : binders_)
+    if (n == name) return var;
+  return lookup(name);
+}
+
 // ------------------------------------------------------------------- term
 
 // `2 + 3` is a term of its own: the tuple (Plus, 2, 3). It is a different object from `5`,
@@ -167,6 +174,46 @@ Term Parser::powLevel() {
 }
 
 Term Parser::atomTerm() {
+  bool number = peek().number;
+  Term base = atomBase();
+  if (number) return base;
+  // Application, after any term: `F(a)`; `F(a, b)`, whose argument is the tuple (a, b);
+  // `F(a)(b)`, applying the value F(a); `t[i]`, the same as `t(i)`.
+  while (at("(") || at("[")) {
+    int line = peek().line;
+    Term arg;
+    if (accept("[")) {
+      arg = term();
+      expect("]");
+    } else {
+      take();
+      std::vector<Term> args;
+      args.push_back(term());
+      while (accept(",")) args.push_back(term());
+      expect(")");
+      arg = args.size() == 1 ? args[0] : Term::ofTuple(std::move(args));
+    }
+    base = Term::of(applyTerm(base, arg, line));
+  }
+  return base;
+}
+
+// `F(a)` is function application. With a concrete `a` it points at the object created by an
+// `Apply F to a.` step; until that step has run, no object has this name. With a variable in
+// F or a it is the object F(x) the rule speaks of; applying the rule puts the value at the
+// object in place of x.
+ObjectId Parser::applyTerm(const Term& fnTerm, const Term& argTerm, int line) {
+  ObjectId fn = w_.resolve(fnTerm), a = w_.resolve(argTerm);
+  if (w_.obj(fn).open || w_.obj(a).open) return w_.apply(fn, a, line);
+  ObjectId value = w_.appliedValue(fn, a);
+  if (value == kNoObject && makeValues_) value = w_.apply(fn, a, line);
+  if (value == kNoObject)
+    err("`" + w_.show(fn) + "(...)` does not exist yet — needs `Apply " + w_.show(fn) +
+        " to ...` first");
+  return value;
+}
+
+Term Parser::atomBase() {
   if (at("[")) {
     // `[A]` is the object representing proposition A. Naming it here is exactly what brings
     // it into existence — lazy pairing.
@@ -202,27 +249,17 @@ Term Parser::atomTerm() {
     Token t = take();
     return Term::of(w_.numeral(Rational(t.text)));
   }
+  if (!peek().text.empty() && peek().text[0] == '"') {
+    // `"Alice"`: a text, an object identified by its characters.
+    return Term::of(w_.text(take().text.substr(1)));
+  }
   if (!atWord()) err("expected a term, got `" + peek().text + "`");
   Token t = take();
-  if (at("(")) {
-    // `F(a)` is function application: it points at the object created by an `Apply F to a.`
-    // step. Until that step has run, no object has this name.
-    take();
-    Term arg = term();
-    expect(")");
-    auto it = applied_.find({lookup(t.text), w_.resolve(arg)});
-    if (it == applied_.end())
-      err("`" + t.text + "(...)` does not exist yet — needs `Apply " + t.text + " to ...` first");
-    return Term::of(it->second);
-  }
   // Notation holes are looked up first — they are only open while parsing a right-hand
-  // side.
+  // side. Then the variables of the binders around, then declared names.
   for (size_t i = 0; i < holeNames_.size(); ++i)
-    if (holeNames_[i] == t.text) return Term::ofVar(kHole + static_cast<VarId>(i));
-  // Then bound variables: the index is the position in the binder stack.
-  for (size_t i = 0; i < binders_.size(); ++i)
-    if (binders_[i] == t.text) return Term::ofVar(static_cast<VarId>(i));
-  return Term::of(lookup(t.text));
+    if (holeNames_[i] == t.text) return Term::of(holeVars_[i]);
+  return Term::of(lookupObject(t.text));
 }
 
 // -------------------------------------------------------------- propositions
@@ -280,20 +317,36 @@ PropId Parser::tryNotation() {
     }
     if (!ok || args.size() != n.holes) continue;
 
-    // `where` guards: can only filter when the filler is already a concrete object.
+    // `where` guards. A concrete filler is looked up in the matrix. A variable is looked up
+    // in what is assumed about it where the notation is used — the `if` part around it, or
+    // the `in S` of its binder; with nothing assumed about it, the guard cannot filter.
     bool guarded = true;
     for (const auto& [i, set] : n.guards) {
-      if (i >= args.size() || !w_.ground(args[i])) continue;
-      if (!w_.toldIn(w_.resolve(args[i]), set)) { guarded = false; break; }
+      if (i >= args.size()) continue;
+      if (w_.ground(args[i])) {
+        if (!w_.toldIn(w_.resolve(args[i]), set)) { guarded = false; break; }
+        continue;
+      }
+      if (args[i].kind != TermKind::Obj || !w_.obj(args[i].obj).variable) continue;
+      ObjectId v = args[i].obj;
+      bool known = false, in = false;
+      for (PropId a : assumed_)
+        for (PropId q : w_.premisesOf(a)) {
+          const Prop& p = w_.prop(q);
+          if (p.kind != PropKind::Atom || !p.positive || !(p.subject == Term::of(v))) continue;
+          known = true;
+          if (p.column == Term::of(set)) in = true;
+        }
+      if (known && !in) { guarded = false; break; }
     }
     if (!guarded) continue;
 
     if (pos_ > bestEnd) {
       bestEnd = pos_;
-      best = w_.fillHoles(n.tmpl, args);
+      best = w_.fillHoles(n.tmpl, n.holeVars, args);
       ambiguous = false;
     } else if (pos_ == bestEnd && best != kNoProp) {
-      PropId other = w_.fillHoles(n.tmpl, args);
+      PropId other = w_.fillHoles(n.tmpl, n.holeVars, args);
       if (other != best) ambiguous = true;
     }
   }
@@ -324,15 +377,22 @@ PropId Parser::primary() {
     }
   }
   if (accept("not")) {
-    expect("(");
-    PropId inner = proposition();
-    expect(")");
-    return w_.neg(inner);
+    // `not (A)`, or `not` before any one proposition: `not a in A`.
+    return w_.neg(primary());
   }
   if (accept("if")) {
     PropId a = proposition();
     expect("then");
-    return w_.implies(a, proposition());
+    assumed_.push_back(a);
+    PropId b;
+    try {
+      b = proposition();
+    } catch (...) {
+      assumed_.pop_back();
+      throw;
+    }
+    assumed_.pop_back();
+    return w_.implies(a, b);
   }
   if (at("for") && peek(1).text == "every") {
     take(); take();
@@ -352,60 +412,107 @@ PropId Parser::primary() {
       }
     }
 
+    // `in` may be followed by any term: a declared set, a variable of a binder around, or
+    // something like Domain(F). It is read before the variables of this list exist, so it
+    // cannot mean one of them.
     std::vector<std::string> vars;
-    std::string setName;
-    bool settled = false;
+    Term set;
+    bool hasSet = false, settled = false;
+    std::unique_ptr<ParseError> lastErr;
     for (size_t n = most; n >= 1 && !settled; --n) {
       pos_ = save;
       vars.clear();
-      setName.clear();
+      hasSet = false;
       vars.push_back(take().text);
       for (size_t i = 1; i < n; ++i) {
         expect(",");
         vars.push_back(take().text);
       }
-      if (at("in") && peek(1).word && peek(2).text == ",") {
+      if (at("in")) {
         take();
-        setName = take().text;
+        try {
+          set = term();
+          hasSet = true;
+        } catch (const ParseError& e) {
+          lastErr = std::make_unique<ParseError>(e);
+          continue;
+        }
       }
       if (at(",")) {
         take();
         settled = true;
       }
     }
-    if (!settled) err("expected a comma and then the body after the variable list");
-
-    // The first variable in the list is the outermost binder, so it gets the largest index;
-    // the last variable is innermost, index 0.
-    for (const std::string& v : vars) binders_.insert(binders_.begin(), v);
-    PropId body = proposition();
-    if (!setName.empty()) {
-      // `for every x, y in S, A` abbreviates nested membership guards.
-      ObjectId set = lookup(setName);
-      for (size_t i = 0; i < vars.size(); ++i) {
-        VarId idx = static_cast<VarId>(vars.size() - 1 - i);
-        body = w_.implies(w_.atom(Term::ofVar(idx), Term::of(set), true), body);
-      }
+    if (!settled) {
+      if (lastErr) throw *lastErr;
+      err("expected a comma and then the body after the variable list");
     }
+
+    // Each variable is an object of its own. The first in the list is the outermost binder.
+    std::vector<ObjectId> objs;
+    for (const std::string& v : vars) {
+      objs.push_back(w_.variable(v));
+      binders_.insert(binders_.begin(), {v, objs.back()});
+    }
+    // `for every x, y in S, A` abbreviates nested membership guards.
+    std::vector<PropId> guards;
+    if (hasSet)
+      for (ObjectId o : objs) guards.push_back(w_.atom(Term::of(o), set, true));
+    assumed_.insert(assumed_.end(), guards.begin(), guards.end());
+    PropId body;
+    try {
+      body = proposition();
+    } catch (...) {
+      assumed_.resize(assumed_.size() - guards.size());
+      binders_.erase(binders_.begin(), binders_.begin() + vars.size());
+      throw;
+    }
+    assumed_.resize(assumed_.size() - guards.size());
+    for (PropId g : guards) body = w_.implies(g, body);
     for (size_t i = 0; i < vars.size(); ++i) {
-      body = w_.forAll(binders_.front(), body);
+      body = w_.forAll(binders_.front().second, body);
       binders_.erase(binders_.begin());
     }
     return body;
   }
   if (at("there") && peek(1).text == "exists") {
+    // `there exists x, y in S such that A`: nested binders, the first outermost, each with
+    // its `in S` joined to what follows by `and`.
     take(); take();
-    std::string var = take().text;
-    std::string setName;
-    if (accept("in")) setName = take().text;
+    std::vector<std::string> vars;
+    vars.push_back(take().text);
+    while (accept(",")) vars.push_back(take().text);
+    Term set;
+    bool hasSet = false;
+    if (accept("in")) {
+      set = term();
+      hasSet = true;
+    }
     expect("such");
     expect("that");
-    binders_.insert(binders_.begin(), var);
-    PropId body = proposition();
-    if (!setName.empty())
-      body = w_.conj(w_.atom(Term::ofVar(0), Term::of(lookup(setName)), true), body);
-    binders_.erase(binders_.begin());
-    return w_.exists(var, body);
+    std::vector<ObjectId> objs;
+    std::vector<PropId> guards;
+    for (const std::string& v : vars) {
+      objs.push_back(w_.variable(v));
+      binders_.insert(binders_.begin(), {v, objs.back()});
+      if (hasSet) guards.push_back(w_.atom(Term::of(objs.back()), set, true));
+    }
+    assumed_.insert(assumed_.end(), guards.begin(), guards.end());
+    PropId body;
+    try {
+      body = proposition();
+    } catch (...) {
+      assumed_.resize(assumed_.size() - guards.size());
+      binders_.erase(binders_.begin(), binders_.begin() + vars.size());
+      throw;
+    }
+    assumed_.resize(assumed_.size() - guards.size());
+    for (size_t i = objs.size(); i-- > 0;) {
+      if (hasSet) body = w_.conj(guards[i], body);
+      body = w_.exists(objs[i], body);
+      binders_.erase(binders_.begin());
+    }
+    return body;
   }
 
   // Atom: term (in | notin) term, or a comparison.
@@ -474,8 +581,8 @@ Stmt Parser::statement() {
     if (accept("=")) {
       s.isTupleLet = true;
       expect("(");
-      s.tupleElems.push_back(take().text);
-      while (accept(",")) s.tupleElems.push_back(take().text);
+      s.tupleTerms.push_back(term());
+      while (accept(",")) s.tupleTerms.push_back(term());
       expect(")");
     } else {
       expect("be");
@@ -524,7 +631,23 @@ Stmt Parser::statement() {
     }
     expect(",");
     expect("it"); expect("follows"); expect("that");
-    s.prop = proposition();
+    makeValues_ = true;
+    try {
+      s.prop = proposition();
+    } catch (const Unapplied& e) {
+      makeValues_ = false;
+      // F(a) cannot be made. The statement is still read to its end, so the run can go on;
+      // running it says what is missing.
+      s.prop = kNoProp;
+      s.error = e.what();
+      while (!at(".") && !peek().text.empty()) take();
+      expect(".");
+      return s;
+    } catch (...) {
+      makeValues_ = false;
+      throw;
+    }
+    makeValues_ = false;
     if (accept("as")) s.label = labelOpt();
     expect(".");
     return s;
@@ -559,7 +682,7 @@ Stmt Parser::statement() {
       s.kind = StmtKind::TakeIn;
       take();  // the variable name, repeated
       expect("in");
-      s.setName = take().text;
+      s.set = term();
     } else if (accept("from")) {
       s.kind = StmtKind::TakeFrom;
       s.refs.push_back(labelOpt());
@@ -670,42 +793,35 @@ Stmt Parser::statement() {
     // Which template words are holes can only be known by reading the right-hand side. Pass
     // one treats every word as a hole and sees which ones the right-hand side uses; pass
     // two reads it again with exactly those. Unused words are fixed words.
+    //
+    // A hole is a variable of the template: a variable object, free in the right-hand side.
+    // So the right-hand side can be anything a proposition can be — quantifiers, F(X).
     size_t rhs = pos_;
     holeNames_ = words;
+    holeVars_.clear();
+    for (const std::string& word : words) holeVars_.push_back(w_.variable(word));
     PropId first = proposition();
 
+    const std::vector<ObjectId>& free = w_.prop(first).freeVars;
     std::vector<bool> used(words.size(), false);
-    std::function<void(const Term&)> markTerm = [&](const Term& t) {
-      if (t.kind == TermKind::Var && t.var >= kHole) {
-        size_t i = t.var - kHole;
-        if (i < used.size()) used[i] = true;
-      }
-      for (const Term& e : t.elems) markTerm(e);
-    };
-    std::function<void(PropId)> mark = [&](PropId cur) {
-      const Prop& p = w_.prop(cur);
-      if (p.kind == PropKind::Atom) {
-        markTerm(p.subject);
-        markTerm(p.column);
-        return;
-      }
-      if (p.left != kNoProp) mark(p.left);
-      if (p.right != kNoProp) mark(p.right);
-    };
-    mark(first);
+    for (size_t i = 0; i < words.size(); ++i)
+      used[i] = std::binary_search(free.begin(), free.end(), holeVars_[i]);
 
     holeNames_.clear();
+    holeVars_.clear();
     for (size_t i = 0; i < words.size(); ++i) {
       bool hole = used[i];
       n.parts.push_back({hole ? std::string() : words[i], hole});
       if (hole) {
         holeNames_.push_back(words[i]);
+        holeVars_.push_back(w_.variable(words[i]));
         ++n.holes;
       }
     }
 
     pos_ = rhs;
     n.tmpl = proposition();
+    n.holeVars = holeVars_;
 
     // `where A in Vectors, B in Vectors` — overload resolution guards.
     if (accept("where")) {
@@ -722,6 +838,7 @@ Stmt Parser::statement() {
     }
     expect(".");
     holeNames_.clear();
+    holeVars_.clear();
 
     notations_.push_back(std::move(n));
     s.kind = StmtKind::Close;  // produces nothing for the runtime

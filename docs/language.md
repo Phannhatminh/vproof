@@ -50,17 +50,21 @@ không đặt ra loại nào — nó ghi một fact:
 | `be an entity`, `be objects`, … | không gì cả |
 
 `Let t = (a, b).` tạo đối tượng `t` và ghi `(t, (a, b)) ∈ Defined` — **không** ghi vào `Eq`.
-Luật `(eq from definition)` của prelude nối nó sang `Eq` khi cần. Các thành phần phải là tên.
+Luật `(eq from definition)` của prelude nối nó sang `Eq` khi cần. Thành phần là term bất kỳ.
 
 ## Term
 
 | viết | là gì |
 |---|---|
-| `alice` | tên đã khai báo, hoặc biến của một `for every` |
+| `alice` | tên đã khai báo, hoặc biến của một `for every` / `there exists` |
 | `3`, `-7`, `1/3`, `0.1` | số hữu tỉ chính xác; `0.1` là đúng `1/10` |
 | `(a, b)`, `(a, (b, c), 5)` | tuple — cùng thành phần thì cùng đối tượng |
+| `"Alice Nguyen"` | văn bản — cùng chữ thì cùng đối tượng |
 | `a + b`, `a - b`, `a * b`, `a / b`, `x ^ 2` | biểu thức — một term riêng, **không** tự tính |
-| `F(a)` | giá trị của hàm `F` tại `a`, sau khi đã có `Apply F to a.` |
+| `F(a)` | giá trị của hàm `F` tại `a`, sau khi đã có `Apply F to a.`; trong luật, `F(x)` |
+| `F(a, b)` | `F((a, b))` |
+| `F(a)(b)` | giá trị của hàm `F(a)` tại `b` |
+| `t[i]` | `t(i)` |
 | `[A]` | đại diện của mệnh đề `A` |
 | `[(h)]` | đại diện của mệnh đề mang nhãn `h` |
 
@@ -74,10 +78,10 @@ t in S                     t notin S
 a <= b    a < b            a >= b    a > b
 A and B                    A or B
 if A then B                A iff B
-not (A)
+not (A)                    not t in S
 for every x, A             for every x, y, z, A
 for every x in S, A        for every x, y in S, A
-there exists x such that A
+there exists x such that A there exists x, y such that A
 there exists x in S such that A
 ```
 
@@ -87,8 +91,11 @@ Ba chỗ cần biết:
 
 - `a <= b` là cách viết của `(a, b) in LessEq`; `a < b` của `(a, b) in Less`; `>` và `>=`
   viết ngược lại. Không có loại mệnh đề so sánh riêng.
-- `for every x in S, A` là viết tắt của `for every x, if x in S then A`, với `S` là một tên
-  cố định. Muốn lượng từ trên cả set thì viết `for every x, S, if x in S then A`.
+- `for every x in S, A` là viết tắt của `for every x, if x in S then A`. `S` là term bất kỳ:
+  tên đã khai báo, biến của một binder bên ngoài, `Domain(F)`… Nó được đọc trước khi các biến
+  của chính danh sách đó có, nên không trỏ vào chúng. `there exists x in S such that A` là
+  `there exists x such that x in S and A`; `there exists x, y such that A` là hai binder lồng.
+- `not` đứng trước đúng một mệnh đề: `not t in S` là `not (t in S)`.
 - `t notin S`, `not (t in S)` là hai mệnh đề khác nhau. `A or B` và `B or A` cũng vậy.
 
 ## Đặt ra
@@ -162,7 +169,7 @@ tiền đề là cách duy nhất để dùng `or` — không có chia trường
 Suppose (h): A {  …  }  Hence (r): if A then B.
 Suppose (h): A {  …  Absurd from …  }  Hence (r): not (A).
 Take x {  …  }  Hence (r): for every x, P(x).
-Take x with x in S {  …  }  Hence (r): for every x in S, P(x).
+Take x with x in S {  …  }  Hence (r): for every x in S, P(x).     -- S là term bất kỳ
 Take w from (ex) {  …  }  Hence (r): C.
 ```
 
@@ -311,13 +318,32 @@ Assume (p): F(a) in Positives.
 Therefore (a, F(a)) in F.
 ```
 
-`F(x)` với `x` là biến của luật hiện chưa viết được; trong luật hãy dùng `(x, y) in F`.
+Trong luật, `F(x)` với `x` là biến của luật viết được: biến là object, nên `F(x)` cũng là
+object. Áp luật cho `a` thì `F(x)` thành `F(a)`. Nếu `F(a)` chưa có, bước áp luật tạo ra nó
+như `Apply F to a`, có kiểm `a ∈ Domain(F)`; kiểm không qua thì bước không đi qua, và thứ
+thiếu là `a ∈ Domain(F)`.
+
+```v
+Let F be a map.
+Let a be an entity.
+Let Positives be a set.
+
+Apply Domain to F.
+Assume (h): a in Domain(F).
+
+Rule (pos): for every x, if x in Domain(F) then F(x) in Positives.
+By rule (pos) applied to (a), it follows that F(a) in Positives.
+Therefore F(a) in Positives.
+Therefore (a, F(a)) in F.
+```
 
 ## Mệnh đề là đối tượng
 
 `[A]` là đối tượng đại diện cho mệnh đề `A`, và `A` đang có khi và chỉ khi `[A] in Holds`.
-Ghi được một chiều thì chiều kia theo. Đại diện có cấu trúc — `(Mem, t, S)`, `(Not, a)`,
-`(All, a)` với biến buộc là `(Var, k)` — nên luật về mệnh đề viết được như luật thường:
+Ghi được một chiều thì chiều kia theo — kể cả khi `[A]` được nhắc tới sau, hoặc khi đại diện
+được viết thẳng thành tuple như `(Mem, t, S)` hay được một luật dựng ra. Đại diện có cấu trúc — `(Mem, t, S)`, `(Not, a)`,
+`(All, a)` với biến buộc là `(Var, k)`, `F(x)` là `(App, F, x)` — nên luật về mệnh đề viết được
+như luật thường:
 
 ```v
 Let t be an entity.
@@ -406,10 +432,12 @@ By rule (join) applied to (alice, bob, carol), it follows that alice manages car
 Therefore (alice, carol) in Boss.
 ```
 
-Chữ trong mẫu mà vế phải dùng tới là lỗ; chữ còn lại là chữ cố định. Vế phải là một mệnh đề
-không chứa lượng từ, và tên trong nó được quy về đối tượng ngay lúc khai báo — nên không bị
-biến của luật bắt mất. Hai mẫu cùng hình dạng phân biệt bằng
-`where A in Vectors, B in Vectors`; cùng khớp mà không phân biệt được thì báo lỗi.
+Chữ trong mẫu mà vế phải dùng tới là lỗ; chữ còn lại là chữ cố định. Lỗ là biến của mẫu, nên
+vế phải là mệnh đề bất kỳ — có lượng từ, có `F(X)` cũng được. Tên trong vế phải được quy về đối
+tượng ngay lúc khai báo — nên không bị biến của luật bắt mất. Hai mẫu cùng hình dạng phân biệt
+bằng `where A in Vectors, B in Vectors`. Chỗ điền là đối tượng cụ thể thì tra trong ma trận;
+là biến thì tra những gì đã giả sử về nó ở chỗ dùng — phần `if` bao quanh, hoặc `in S` của
+binder. Cùng khớp mà không phân biệt được thì báo lỗi.
 
 ## Tên có sẵn
 
@@ -418,7 +446,7 @@ biến của luật bắt mất. Hai mẫu cùng hình dạng phân biệt bằn
 `SimplifiedIf`, `Expanded`, `Instance`.
 
 **Nhãn dựng đại diện và biểu thức:**
-`Mem`, `NotMem`, `And`, `Or`, `Implies`, `Iff`, `Not`, `All`, `Ex`, `Var`,
+`Mem`, `NotMem`, `And`, `Or`, `Implies`, `Iff`, `Not`, `All`, `Ex`, `Var`, `App`,
 `Plus`, `Minus`, `Times`, `Div`, `Pow`.
 
 **Của prelude:** `SET`, `RELATION`, `MAP`, `Domain`, `Eq`, `Function`, `TotalOn`, `Approx`,

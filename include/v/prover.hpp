@@ -31,6 +31,10 @@ class Prover {
   Result introIff(PropId aToB, PropId bToA, int line);
   // Look up A(t), store `there exists x such that A(x)`: abstracts `witness`.
   Result introExists(PropId instance, ObjectId witness, const std::string& name, int line);
+  // Look up A(t), store the stated `there exists x such that A(x)`: putting the witness in
+  // place of x must give exactly A(t). Without a witness, the body must not mention x and
+  // is A(t) itself.
+  Result introExistsAt(PropId existential, PropId instance, ObjectId witness, int line);
 
   // --- Elimination, no scope ---
   Result elimAnd(PropId conjunction, bool takeLeft, int line);
@@ -61,6 +65,7 @@ class Prover {
   struct Scope {
     ScopeKind kind = ScopeKind::Suppose;
     Mark mark = 0;
+    ObjectId objects = 0;  // object count when the scope opened
     PropId assumption = kNoProp;
     PropId membership = kNoProp;
     ObjectId fresh = kNoObject;

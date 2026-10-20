@@ -9,32 +9,22 @@ namespace v {
 using PropId = uint32_t;
 constexpr PropId kNoProp = UINT32_MAX;
 
-using VarId = uint32_t;  // de Bruijn index: counts outward through the binders
-
-// Holes of a Notation template, numbered from kHole. Kept apart from de Bruijn indices so a
-// template can never capture a bound variable at the use site.
-constexpr VarId kHole = 1u << 20;
-
 // A term in either position of an atomic proposition. Leaves are handles, not surface names
 // — that is where the old version broke, and it is what lets the runtime stand on its own.
-enum class TermKind { Obj, Var, Tuple };
+//
+// A variable is an object like any other (see Object::variable), so it sits in a term as
+// Obj. So does a hole of a Notation template: it is a variable of the template.
+enum class TermKind { Obj, Tuple };
 
 struct Term {
   TermKind kind = TermKind::Obj;
   ObjectId obj = kNoObject;
-  VarId var = 0;
   std::vector<Term> elems;  // Tuple
 
   static Term of(ObjectId id) {
     Term t;
     t.kind = TermKind::Obj;
     t.obj = id;
-    return t;
-  }
-  static Term ofVar(VarId v) {
-    Term t;
-    t.kind = TermKind::Var;
-    t.var = v;
     return t;
   }
   static Term ofTuple(std::vector<Term> elems) {
@@ -62,10 +52,11 @@ struct Prop {
   PropId left = kNoProp;  // And/Or/Implies/Iff/Not, and the body of a binder
   PropId right = kNoProp; // And/Or/Implies/Iff
 
-  std::string binderName;  // for printing only
+  ObjectId bound = kNoObject;  // ForAll/Exists: the variable object it binds
 
-  bool sameShape(const Prop& o) const;
-  bool shapeLess(const Prop& o) const;
+  // Variables occurring in it that no binder inside it binds, sorted. Empty means the
+  // proposition is closed.
+  std::vector<ObjectId> freeVars;
 };
 
 }  // namespace v

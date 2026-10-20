@@ -25,14 +25,16 @@ int main() {
     check(w.neg(a1) != neg, "not (t ∈ S) differs from t ∉ S");
   }
 
-  // --- Alpha-renaming is free, because bound variables are stored as indices ---
+  // --- Binding a different variable object does not make a different proposition ---
   {
     World w;
     ObjectId A = w.declare("A"), B = w.declare("B");
-    PropId body1 = w.implies(w.atom(Term::ofVar(0), Term::of(A), true),
-                             w.atom(Term::ofVar(0), Term::of(B), true));
-    PropId r1 = w.forAll("x", body1);
-    PropId r2 = w.forAll("y", body1);
+    ObjectId x = w.variable("x"), y = w.variable("y");
+    auto body = [&](ObjectId v) {
+      return w.implies(w.atom(Term::of(v), Term::of(A), true), w.atom(Term::of(v), Term::of(B), true));
+    };
+    PropId r1 = w.forAll(x, body(x));
+    PropId r2 = w.forAll(y, body(y));
     check(r1 == r2, "differing only in bound-variable names means the same proposition");
     check(w.showProp(r1) == "for every x, (if x ∈ A then x ∈ B)",
           "printing uses the binder name interned first: " + w.showProp(r1));

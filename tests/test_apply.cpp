@@ -17,8 +17,9 @@ int main() {
     World w;
     ObjectId alice = w.declare("alice"), A = w.declare("A"), B = w.declare("B");
     // Rule (r): for every x, if x ∈ A then x ∈ B.
-    PropId r = w.forAll("x", w.implies(w.atom(Term::ofVar(0), Term::of(A), true),
-                                       w.atom(Term::ofVar(0), Term::of(B), true)));
+    ObjectId vx = w.variable("x");
+    PropId r = w.forAll(vx, w.implies(w.atom(Term::of(vx), Term::of(A), true),
+                                      w.atom(Term::of(vx), Term::of(B), true)));
     w.tell(r, Reason::stipulate(1));
 
     auto miss = w.applyRule(r, {alice}, "r", 3);
@@ -36,8 +37,9 @@ int main() {
   {
     World w;
     ObjectId alice = w.declare("alice"), A = w.declare("A"), B = w.declare("B");
-    PropId r = w.forAll("x", w.implies(w.atom(Term::ofVar(0), Term::of(A), true),
-                                       w.atom(Term::ofVar(0), Term::of(B), true)));
+    ObjectId vx = w.variable("x");
+    PropId r = w.forAll(vx, w.implies(w.atom(Term::of(vx), Term::of(A), true),
+                                      w.atom(Term::of(vx), Term::of(B), true)));
     w.tell(w.atom(Term::of(alice), Term::of(A), true), Reason::stipulate(2));
     w.applyRule(r, {alice}, "r", 7);
 
@@ -57,15 +59,16 @@ int main() {
     World w;
     ObjectId a = w.declare("a"), b = w.declare("b"), c = w.declare("c");
     ObjectId Boss = w.declare("Boss");
-    auto pair = [&](VarId i, VarId j) {
-      return Term::ofTuple({Term::ofVar(i), Term::ofVar(j)});
+    ObjectId x = w.variable("x"), y = w.variable("y"), z = w.variable("z");
+    auto pair = [&](ObjectId i, ObjectId j) {
+      return Term::ofTuple({Term::of(i), Term::of(j)});
     };
     // for every x, y, z, if (x,y) ∈ Boss and (y,z) ∈ Boss then (x,z) ∈ Boss.
     PropId body = w.implies(
-        w.conj(w.atom(pair(2, 1), Term::of(Boss), true),
-               w.atom(pair(1, 0), Term::of(Boss), true)),
-        w.atom(pair(2, 0), Term::of(Boss), true));
-    PropId r = w.forAll("x", w.forAll("y", w.forAll("z", body)));
+        w.conj(w.atom(pair(x, y), Term::of(Boss), true),
+               w.atom(pair(y, z), Term::of(Boss), true)),
+        w.atom(pair(x, z), Term::of(Boss), true));
+    PropId r = w.forAll(x, w.forAll(y, w.forAll(z, body)));
 
     w.tell(w.atom(Term::ofTuple({Term::of(a), Term::of(b)}), Term::of(Boss), true),
            Reason::stipulate(1));
@@ -84,8 +87,9 @@ int main() {
   {
     World w;
     ObjectId kim = w.declare("kim"), Minors = w.declare("Minors"), Voters = w.declare("Voters");
-    PropId r = w.forAll("x", w.implies(w.atom(Term::ofVar(0), Term::of(Minors), true),
-                                       w.atom(Term::ofVar(0), Term::of(Voters), false)));
+    ObjectId vx = w.variable("x");
+    PropId r = w.forAll(vx, w.implies(w.atom(Term::of(vx), Term::of(Minors), true),
+                                      w.atom(Term::of(vx), Term::of(Voters), false)));
     w.tell(w.atom(Term::of(kim), Term::of(Minors), true), Reason::stipulate(1));
     auto res = w.applyRule(r, {kim}, "no vote", 4);
     check(res.ok && w.toldOut(kim, Voters), "a ∉ conclusion raises the negative flag");
@@ -96,7 +100,8 @@ int main() {
   {
     World w;
     ObjectId n = w.declare("n"), N = w.declare("N");
-    PropId r = w.forAll("x", w.atom(Term::ofVar(0), Term::of(N), true));
+    ObjectId vx = w.variable("x");
+    PropId r = w.forAll(vx, w.atom(Term::of(vx), Term::of(N), true));
     auto res = w.applyRule(r, {n}, "everything", 2);
     check(res.ok && w.toldIn(n, N), "a rule with no premises applies immediately");
   }
@@ -105,10 +110,11 @@ int main() {
   {
     World w;
     ObjectId x = w.declare("x"), S = w.declare("S"), P = w.declare("P"), Q = w.declare("Q");
-    PropId r = w.forAll("x", w.implies(
-        w.atom(Term::ofVar(0), Term::of(S), true),
-        w.conj(w.atom(Term::ofVar(0), Term::of(P), true),
-               w.atom(Term::ofVar(0), Term::of(Q), true))));
+    ObjectId vx = w.variable("x");
+    PropId r = w.forAll(vx, w.implies(
+        w.atom(Term::of(vx), Term::of(S), true),
+        w.conj(w.atom(Term::of(vx), Term::of(P), true),
+               w.atom(Term::of(vx), Term::of(Q), true))));
     w.tell(w.atom(Term::of(x), Term::of(S), true), Reason::stipulate(1));
     auto res = w.applyRule(r, {x}, "staff", 3);
     check(res.ok && w.holds(res.conclusion), "a compound conclusion goes into the store");
@@ -119,8 +125,9 @@ int main() {
   {
     World w;
     ObjectId x = w.declare("x"), A = w.declare("A"), B = w.declare("B");
-    PropId r = w.forAll("x", w.implies(w.atom(Term::ofVar(0), Term::of(A), true),
-                                       w.atom(Term::ofVar(0), Term::of(B), true)));
+    ObjectId vx = w.variable("x");
+    PropId r = w.forAll(vx, w.implies(w.atom(Term::of(vx), Term::of(A), true),
+                                      w.atom(Term::of(vx), Term::of(B), true)));
     size_t cells = w.cellCount();
     auto res = w.applyRule(r, {x}, "r", 9);
     check(!res.ok && w.cellCount() == cells, "no cell appears when a step fails");

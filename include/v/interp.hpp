@@ -31,6 +31,7 @@ class Interp {
 
  private:
   void exec(const Stmt& s, Report& rep);
+  void execStmt(const Stmt& s, Report& rep);
   PropId ref(const std::string& label, int line) const;
   void bind(const std::string& label, PropId p);
   void whyChain(PropId p, int depth, Report& rep) const;
@@ -38,16 +39,19 @@ class Interp {
   // Every result comes with an error bound; exact means the error is 0.
   Rational evalExpr(const Term& t, int line);
   // Read off a witness by matching, not by trying objects one by one.
-  bool matchTerm(const Term& concrete, const Term& pattern, VarId depth,
+  using Pairing = std::map<ObjectId, ObjectId>;
+  bool matchObj(ObjectId concrete, ObjectId pattern, ObjectId var, Pairing& same,
+                ObjectId& witness) const;
+  bool matchTerm(const Term& concrete, const Term& pattern, ObjectId var, Pairing& same,
                  ObjectId& witness) const;
-  bool matchWitness(PropId concrete, PropId pattern, VarId depth, ObjectId& witness) const;
+  bool matchWitness(PropId concrete, PropId pattern, ObjectId var, Pairing& same,
+                    ObjectId& witness) const;
 
   std::map<std::string, ObjectId> names_;
-  AppliedMap applied_;
   std::map<std::string, PropId> labels_;
   World w_;
   Prover pv_{w_};
-  Parser parser_{w_, names_, applied_, labels_};
+  Parser parser_{w_, names_, labels_};
   // Labels and names declared inside a scope live only in that scope: on exit, the
   // propositions and objects they point at have been removed from the world.
   struct Frame {

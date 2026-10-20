@@ -1,7 +1,6 @@
 #include "v/prover.hpp"
 
 #include <algorithm>
-#include <functional>
 
 namespace v {
 
@@ -85,38 +84,10 @@ Prover::Result Prover::introExists(PropId instance, ObjectId witness,
                                    const std::string& name, int line) {
   if (!w_.holds(instance)) return missing(instance);
 
-  // Abstraction: every mention of the witness becomes the bound variable of a new binder.
-  std::function<Term(const Term&, VarId)> absTerm = [&](const Term& t, VarId depth) -> Term {
-    switch (t.kind) {
-      case TermKind::Obj:
-        return t.obj == witness ? Term::ofVar(depth) : t;
-      case TermKind::Var:
-        return Term::ofVar(t.var + 1);  // make room for the new outer binder
-      case TermKind::Tuple: {
-        std::vector<Term> out;
-        for (const Term& e : t.elems) out.push_back(absTerm(e, depth));
-        return Term::ofTuple(std::move(out));
-      }
-    }
-    return t;
-  };
-  std::function<PropId(PropId, VarId)> go = [&](PropId cur, VarId depth) -> PropId {
-    const Prop& p = w_.prop(cur);
-    switch (p.kind) {
-      case PropKind::Atom:
-        return w_.atom(absTerm(p.subject, depth), absTerm(p.column, depth), p.positive);
-      case PropKind::And:     return w_.conj(go(p.left, depth), go(p.right, depth));
-      case PropKind::Or:      return w_.disj(go(p.left, depth), go(p.right, depth));
-      case PropKind::Implies: return w_.implies(go(p.left, depth), go(p.right, depth));
-      case PropKind::Iff:     return w_.iff(go(p.left, depth), go(p.right, depth));
-      case PropKind::Not:     return w_.neg(go(p.left, depth));
-      case PropKind::ForAll:  return w_.forAll(p.binderName, go(p.left, depth + 1));
-      case PropKind::Exists:  return w_.exists(p.binderName, go(p.left, depth + 1));
-    }
-    return cur;
-  };
-
-  PropId out = w_.exists(name, go(instance, 0));
+  // Abstraction: every mention of the witness becomes the variable of a new binder.
+  ObjectId var = w_.variable(name);
+  PropId body = w_.substitute(instance, witness, var, line);
+  PropId out = w_.exists(var, body);
   Reason why = Reason::derive("exists", line);
   why.antecedents = {Antecedent{instance}};
   w_.tell(out, std::move(why));
@@ -124,6 +95,24 @@ Prover::Result Prover::introExists(PropId instance, ObjectId witness,
   Result r;
   r.ok = true;
   r.prop = out;
+  return r;
+}
+
+Prover::Result Prover::introExistsAt(PropId existential, PropId instance, ObjectId witness,
+                                     int line) {
+  const Prop& e = w_.prop(existential);
+  if (e.kind != PropKind::Exists) return fail("not a `there exists` proposition");
+  if (!w_.holds(instance)) return missing(instance);
+  PropId at = witness == kNoObject ? e.left : w_.instantiate(existential, witness, line, false);
+  if (at != instance) return fail("the premise is not the body at the witness");
+
+  Reason why = Reason::derive("exists", line);
+  why.antecedents = {Antecedent{instance}};
+  w_.tell(existential, std::move(why));
+
+  Result r;
+  r.ok = true;
+  r.prop = existential;
   return r;
 }
 
@@ -217,6 +206,7 @@ Prover::Result Prover::suppose(PropId assumption, const std::string& label, int 
   Scope s;
   s.kind = ScopeKind::Suppose;
   s.mark = w_.mark();
+  s.objects = static_cast<ObjectId>(w_.objectCount());
   s.assumption = assumption;
   s.label = label;
   s.line = line;
@@ -233,6 +223,7 @@ Prover::Result Prover::take(const std::string& name, int line) {
   Scope s;
   s.kind = ScopeKind::Take;
   s.mark = w_.mark();
+  s.objects = static_cast<ObjectId>(w_.objectCount());
   s.name = name;
   s.line = line;
   s.fresh = w_.declare(name);  // nobody has said anything about it
@@ -247,6 +238,7 @@ Prover::Result Prover::takeIn(const std::string& name, ObjectId set, int line) {
   Scope s;
   s.kind = ScopeKind::TakeIn;
   s.mark = w_.mark();
+  s.objects = static_cast<ObjectId>(w_.objectCount());
   s.name = name;
   s.line = line;
   s.fresh = w_.declare(name);
@@ -267,6 +259,7 @@ Prover::Result Prover::takeFrom(const std::string& name, PropId existential, int
   Scope s;
   s.kind = ScopeKind::TakeFrom;
   s.mark = w_.mark();
+  s.objects = static_cast<ObjectId>(w_.objectCount());
   s.name = name;
   s.line = line;
   s.fresh = w_.declare(name);
@@ -274,7 +267,7 @@ Prover::Result Prover::takeFrom(const std::string& name, PropId existential, int
   scopes_.push_back(s);
 
   // Witnesses are always fresh: each time a different object is taken out.
-  PropId about = w_.instantiate(existential, s.fresh);
+  PropId about = w_.instantiate(existential, s.fresh, line, false);
   Reason why = Reason::derive("take", line);
   why.antecedents = {Antecedent{existential}};
   w_.tell(about, std::move(why));
@@ -304,13 +297,13 @@ Prover::Result Prover::hence(PropId stated, const std::string& label, int line) 
     }
     case ScopeKind::Take: {
       if (out.kind != PropKind::ForAll) return fail("the exit proposition must be `for every …`");
-      PropId inner = w_.instantiate(stated, s.fresh);
+      PropId inner = w_.instantiate(stated, s.fresh, line, false);
       if (!w_.holds(inner)) return missing(inner);
       break;
     }
     case ScopeKind::TakeIn: {
       if (out.kind != PropKind::ForAll) return fail("the exit proposition must be `for every …`");
-      PropId inner = w_.instantiate(stated, s.fresh);
+      PropId inner = w_.instantiate(stated, s.fresh, line, false);
       const Prop& i = w_.prop(inner);
       if (i.kind != PropKind::Implies || i.left != s.membership)
         return fail("the exit proposition must be `for every x, if x ∈ S then …`");
@@ -328,8 +321,9 @@ Prover::Result Prover::hence(PropId stated, const std::string& label, int line) 
   }
 
   // Build the proposition first, roll back to the mark, then store it — so it survives
-  // outside the removed region.
-  World::PropTree keep = w_.snapshot(stated);
+  // outside the removed region. Its variables, made while reading it inside the scope, are
+  // made again.
+  World::PropTree keep = w_.snapshot(stated, s.objects);
   scopes_.pop_back();
   w_.rollback(s.mark);
   PropId result = w_.rebuild(keep);

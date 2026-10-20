@@ -107,6 +107,8 @@ int main(int argc, char** argv) {
   runFile(dir + "/column.v", 4);
   runFile(dir + "/induction.v", 2);
   runFile(dir + "/reals.v", 2);
+  runFile(dir + "/rulefn.v", 6);
+  runFile(dir + "/forms.v", 12);
 
   // A cell nobody has spoken about checks as neither polarity — which is not the same as
   // "false".
@@ -174,6 +176,25 @@ int main(int argc, char** argv) {
               "Apply Domain to F.\n"
               "Assume (h): a in Domain(F).\n"
               "Assume (p): F(a) in P.\n",
+              "does not exist yet — needs `Apply F to");
+
+  expectError("a rule with F(x), applied where the argument is not known to be in the domain",
+              "Let F be a map.\n"
+              "Let a be an entity.\n"
+              "Let P be a set.\n"
+              "Apply Domain to F.\n"
+              "Rule (r): for every x, F(x) in P.\n"
+              "By rule (r) applied to (a), it follows that F(a) in P.\n",
+              "step does not go through, missing: a ∈ Domain(F)");
+
+  expectError("F(a) outside a rule step still needs the application step",
+              "Let F be a map.\n"
+              "Let a be an entity.\n"
+              "Let P be a set.\n"
+              "Apply Domain to F.\n"
+              "Assume (h): a in Domain(F).\n"
+              "Rule (r): for every x, F(x) in P.\n"
+              "Therefore F(a) in P.\n",
               "does not exist yet — needs `Apply F to");
 
   expectError("applying a function before the argument is known to be in the domain",

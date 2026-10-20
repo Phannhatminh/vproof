@@ -163,8 +163,8 @@ dung người dùng nạp vào.
 ### Áp hàm
 
 `Tuple(N)` là áp hàm `Tuple` vào `N`. `x(i)` là áp hàm `x` vào `i`, và lấy phần tử thứ `i`
-của một tuple `t(i)` cũng vậy, vì tuple là hàm. (Cú pháp `t[i]` từng được bàn nhưng chưa cài;
-hiện chỉ có dạng `F(a)`.)
+của một tuple `t(i)` cũng vậy, vì tuple là hàm. `t[i]` là cách viết khác của `t(i)`. Hàm nhiều
+đối số nhận tuple: `F(a, b)` là `F((a, b))`. Giá trị là hàm thì áp tiếp được: `F(a)(b)`.
 
 Áp hàm **không** phải thao tác của cơ chế. Hàm, quan hệ, set đều dựng từ primitive, nên áp
 hàm cũng vậy: nó là **cú pháp**, và nó dịch xuống các bước thường dùng luật của thư viện.
@@ -191,9 +191,13 @@ Thiếu tiền đề thì bước không đi được: không đối tượng n�
 ghi, và lỗi chỉ đúng chỗ thiếu. Nhắc `F(a)` ở bất cứ đâu trước khi bước áp xảy ra cũng
 không đi được.
 
-Giới hạn hiện có: `F(x)` với `x` là biến của một luật **chưa** viết được, vì `F(a)` được quy
-về đối tượng ngay lúc parse, mà biến thì chưa có đối tượng. Trong luật phải nói qua quan hệ:
-`(x, y) ∈ F` thay cho `F(x) = y`.
+Biến của luật là object, nên `F(x)` với `x` là biến của luật cũng là một object: đối tượng mà
+luật nói tới. Không fact nào được ghi về nó. Áp luật cho `a` thì `F(x)` thành `F(a)`: có rồi thì
+dùng, chưa có thì bước áp luật tạo ra nó đúng như `Apply F to a`, có kiểm `a ∈ Domain(F)`.
+Kiểm không qua thì bước không đi qua, và thứ thiếu là `a ∈ Domain(F)`. Kết luận nêu trong
+chính câu `By rule ...` cũng được tạo `F(a)` theo cách đó. Lấy nhân chứng ra khỏi
+`there exists` và kiểm điều một scope đã chứng minh thì chỉ tạo đối tượng `F(a)`, không ghi
+`(a, F(a)) ∈ F`.
 
 ```
 Let F be a map.
@@ -596,10 +600,11 @@ Cơ chế giữ hai chiều:
 | `for every x, A` | `(All, a)` |
 | `there exists x such that A` | `(Ex, a)` |
 
-Biến buộc bên trong thân thành `(Var, k)` với `k` là chỉ số de Bruijn, không phải tên. Bắt
-buộc phải thế: hai mệnh đề chỉ khác tên biến buộc là cùng một mệnh đề, nên đại diện của
-chúng phải trùng, và chỉ số làm chuyện đó tự đúng. Nhìn vào là đọc được hình dạng, vì tuple
-đọc được.
+Biến của luật là object, nhưng trong đại diện biến buộc bên trong thân viết thành `(Var, k)`,
+với `k` là vị trí của nó giữa các binder bao quanh, trong cùng là 0. Bắt buộc phải thế: hai
+mệnh đề chỉ khác ở object biến mà chúng buộc là cùng một mệnh đề, nên đại diện của chúng phải
+trùng. `F(x)` viết thành `(App, F, x)`, với `x` viết như trên. Nhìn vào là đọc được hình dạng,
+vì tuple đọc được.
 
 Trong nguồn, `[A]` là đại diện của mệnh đề `A`, và `[(h)]` là đại diện của mệnh đề mang nhãn
 `h`. Viết nó ra chính là hành động làm nó sinh ra.
@@ -607,6 +612,11 @@ Trong nguồn, `[A]` là đại diện của mệnh đề `A`, và `[(h)]` là �
 **`Holds`.** `p ∈ Holds` khi và chỉ khi mệnh đề mà `p` đại diện đang có trong kho. Đây là
 một ô như mọi ô, nên nó theo scope: vào scope giả định `A` thì đại diện của `A` vào `Holds`,
 ra scope thì rụng theo.
+
+Hai chiều được giữ cả khi ghép xảy ra muộn: `p ∈ Holds` ghi trước, `[A]` nhắc tới sau, thì lúc
+ghép `A` được cất. Và `p` không cần đi qua `[A]` mới được nhận ra: tuple viết thẳng như
+`(Mem, t, S)`, hay do một luật dựng ra, khi vào `Holds` thì cơ chế đọc hình dạng của nó —
+`Mem`, `And`, `All` với `(Var, k)` bên trong, `App`… — ra mệnh đề nó đại diện, ghép, và cất.
 
 Phần còn lại là thư viện, viết bằng V như mọi thứ khác:
 
@@ -957,8 +967,8 @@ không được dùng là chữ cố định.
 
 **Hygiene.** Vế phải quy về đối tượng ngay lúc khai báo: `Boss` thành một `ObjectId`, không
 còn là tên. Chỗ dùng chỉ điền term vào lỗ, không tra tên nào, nên biến của một luật trùng
-tên với `Boss` không bắt được nó. Đây là đúng chỗ bản v0.3 hỏng. Lỗ đánh số ở một dải riêng,
-tách khỏi chỉ số de Bruijn.
+tên với `Boss` không bắt được nó. Đây là đúng chỗ bản v0.3 hỏng. Lỗ là một loại term riêng,
+không phải object, nên không lẫn với biến của luật.
 
 **Quá tải.** Hai mẫu cùng hình dạng phân biệt bằng `where`:
 
@@ -968,8 +978,9 @@ Notation: "A plus B is C" means (A, B, C) in NumSum where A in Scalars, B in Sca
 ```
 
 Dài nhất thắng; hai mẫu cùng khớp cùng độ dài mà không phân biệt được thì báo lỗi, không
-chọn bừa. Giới hạn: `where` chỉ kiểm được khi chỗ điền là đối tượng cụ thể, còn biến của
-luật thì bỏ qua.
+chọn bừa. Chỗ điền là đối tượng cụ thể thì `where` tra trong ma trận; là biến thì tra những gì
+đã giả sử về biến đó ở chỗ dùng — phần `if` bao quanh, hoặc `in S` của binder. Không có giả sử
+nào về nó thì `where` không lọc được.
 
 ## Quan hệ và nhãn của cơ chế
 
@@ -978,7 +989,7 @@ lý thuyết đọc chúng. Không có cái nào mang nghĩa logic cho tới khi
 
 | tên | ai ghi, khi nào |
 |---|---|
-| `Holds` | đồng bộ hai chiều với kho mệnh đề, cho mọi mệnh đề đã có đại diện |
+| `Holds` | đồng bộ hai chiều với kho mệnh đề, cho mọi đối tượng có hình dạng của một đại diện |
 | `Column` | mỗi lần một đối tượng được dùng làm cột |
 | `Defined` | `Let t = (a, b).` ghi `(t, (a, b))` |
 | `Computed` | `Compute e.` ghi `(e, kết quả, sai số)` |
@@ -990,7 +1001,7 @@ lý thuyết đọc chúng. Không có cái nào mang nghĩa logic cho tới khi
 | `Instance` | `Instantiate (h) at t.` ghi `(đại diện h, t, đại diện thể hiện)` |
 
 Nhãn dựng đại diện và biểu thức: `Mem`, `NotMem`, `And`, `Or`, `Implies`, `Iff`, `Not`,
-`All`, `Ex`, `Var`, và `Plus`, `Minus`, `Times`, `Div`, `Pow`.
+`All`, `Ex`, `Var`, `App`, và `Plus`, `Minus`, `Times`, `Div`, `Pow`.
 
 ## Vòng đời một chương trình
 

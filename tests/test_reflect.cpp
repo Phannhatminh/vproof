@@ -88,12 +88,13 @@ int main() {
 
     // Rule (dne): for every p, if (not, (not, p)) ∈ Holds then p ∈ Holds.
     ObjectId notTag = w.tag("Not");
+    ObjectId pv = w.variable("p");
     PropId dne = w.forAll(
-        "p",
+        pv,
         w.implies(w.atom(Term::ofTuple({Term::of(notTag),
-                                        Term::ofTuple({Term::of(notTag), Term::ofVar(0)})}),
+                                        Term::ofTuple({Term::of(notTag), Term::of(pv)})}),
                          Term::of(H), true),
-                  w.atom(Term::ofVar(0), Term::of(H), true)));
+                  w.atom(Term::of(pv), Term::of(H), true)));
     p.assume(dne, 1);
 
     p.assume(nns, 2);
@@ -111,16 +112,17 @@ int main() {
   {
     World w; Prover p(w);
     ObjectId A = w.declare("A");
-    PropId all = w.forAll("x", w.atom(Term::ofVar(0), Term::of(A), true));
+    ObjectId x = w.variable("x"), y = w.variable("y"), x2 = w.variable("x");
+    PropId all = w.forAll(x, w.atom(Term::of(x), Term::of(A), true));
     ObjectId r1 = w.represent(all);
     check(r1 != kNoObject, "a quantified proposition has a representative");
     check(w.representedBy(r1) == all, "it maps back");
 
-    PropId same = w.forAll("y", w.atom(Term::ofVar(0), Term::of(A), true));
+    PropId same = w.forAll(y, w.atom(Term::of(y), Term::of(A), true));
     check(same == all && w.represent(same) == r1,
           "differing only in bound-variable names gives the same representative");
 
-    PropId other = w.exists("x", w.atom(Term::ofVar(0), Term::of(A), true));
+    PropId other = w.exists(x2, w.atom(Term::of(x2), Term::of(A), true));
     check(w.represent(other) != r1, "for every and there exists are two different representatives");
 
     // Structured: (All, (Mem, (Var, 0), A))
@@ -141,15 +143,17 @@ int main() {
   {
     World w; Prover p(w);
     ObjectId A = w.declare("A"), B = w.declare("B");
-    PropId goal = w.forAll("x", w.implies(w.atom(Term::ofVar(0), Term::of(A), true),
-                                          w.atom(Term::ofVar(0), Term::of(B), true)));
+    ObjectId x = w.variable("x");
+    PropId goal = w.forAll(x, w.implies(w.atom(Term::of(x), Term::of(A), true),
+                                        w.atom(Term::of(x), Term::of(B), true)));
     ObjectId H = w.holdsColumn(), notTag = w.tag("Not");
+    ObjectId pv = w.variable("p");
     PropId dne = w.forAll(
-        "p",
+        pv,
         w.implies(w.atom(Term::ofTuple({Term::of(notTag),
-                                        Term::ofTuple({Term::of(notTag), Term::ofVar(0)})}),
+                                        Term::ofTuple({Term::of(notTag), Term::of(pv)})}),
                          Term::of(H), true),
-                  w.atom(Term::ofVar(0), Term::of(H), true)));
+                  w.atom(Term::of(pv), Term::of(H), true)));
     p.assume(dne, 1);
     p.assume(w.neg(w.neg(goal)), 2);
 
@@ -161,6 +165,25 @@ int main() {
     auto res = w.applyRule(dne, {rg}, "dne", 3);
     check(res.ok && w.holds(goal),
           "not (not (for every x, ...)) through (dne) yields the quantified proposition");
+  }
+
+  // --- F(x) inside a representative: (App, F, (Var, 0)) ---
+  {
+    World w;
+    ObjectId F = w.declare("F"), P = w.declare("P");
+    ObjectId x = w.variable("x");
+    ObjectId fx = w.apply(F, x, 0);
+    check(w.obj(fx).open, "F(x) with x a variable is an open object");
+    PropId all = w.forAll(x, w.atom(Term::of(fx), Term::of(P), true));
+    const Object& o = w.obj(w.represent(all));
+    const Object& body = w.obj(o.elems[1]);
+    const Object& app = w.obj(body.elems[1]);
+    const Object& var = w.obj(app.elems[2]);
+    check(!o.open && app.kind == Kind::Tuple && app.elems.size() == 3 &&
+              w.obj(app.elems[0]).name == "App" && app.elems[1] == F &&
+              var.kind == Kind::Tuple && w.obj(var.elems[0]).name == "Var" &&
+              w.obj(var.elems[1]).name == "0",
+          "F(x) is represented as (App, F, (Var, 0)), and the representative is closed");
   }
 
   std::cout << (failures ? "\nFAILURES: " : "\nall passed, failures: ") << failures << "\n";

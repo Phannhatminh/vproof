@@ -50,17 +50,21 @@ words after `be` do not introduce a type — they record a fact:
 | `be an entity`, `be objects`, … | nothing |
 
 `Let t = (a, b).` creates `t` and records `(t, (a, b)) ∈ Defined` — **not** `Eq`. The prelude
-rule `(eq from definition)` connects it to `Eq` when needed. The components must be names.
+rule `(eq from definition)` connects it to `Eq` when needed. The components are any terms.
 
 ## Terms
 
 | written | meaning |
 |---|---|
-| `alice` | a declared name, or a variable bound by `for every` |
+| `alice` | a declared name, or a variable bound by `for every` / `there exists` |
 | `3`, `-7`, `1/3`, `0.1` | exact rationals; `0.1` is exactly `1/10` |
 | `(a, b)`, `(a, (b, c), 5)` | tuples — same components, same object |
+| `"Alice Nguyen"` | text — same characters, same object |
 | `a + b`, `a - b`, `a * b`, `a / b`, `x ^ 2` | expressions — a term of their own, **not** evaluated |
-| `F(a)` | the value of `F` at `a`, once `Apply F to a.` has run |
+| `F(a)` | the value of `F` at `a`, once `Apply F to a.` has run; inside a rule, `F(x)` |
+| `F(a, b)` | `F((a, b))` |
+| `F(a)(b)` | the value of the function `F(a)` at `b` |
+| `t[i]` | `t(i)` |
 | `[A]` | the object representing proposition `A` |
 | `[(h)]` | the object representing the proposition labelled `h` |
 
@@ -74,10 +78,10 @@ t in S                     t notin S
 a <= b    a < b            a >= b    a > b
 A and B                    A or B
 if A then B                A iff B
-not (A)
+not (A)                    not t in S
 for every x, A             for every x, y, z, A
 for every x in S, A        for every x, y in S, A
-there exists x such that A
+there exists x such that A there exists x, y such that A
 there exists x in S such that A
 ```
 
@@ -87,8 +91,12 @@ Three things to know:
 
 - `a <= b` is notation for `(a, b) in LessEq`; `a < b` for `(a, b) in Less`; `>` and `>=` are
   written the other way round. There is no separate kind of comparison proposition.
-- `for every x in S, A` abbreviates `for every x, if x in S then A`, with `S` a fixed name. To
-  quantify over the set too, write `for every x, S, if x in S then A`.
+- `for every x in S, A` abbreviates `for every x, if x in S then A`. `S` is any term: a
+  declared name, a variable of an enclosing binder, `Domain(F)`… It is read before the
+  variables of its own list exist, so it cannot mean one of them. `there exists x in S such
+  that A` is `there exists x such that x in S and A`; `there exists x, y such that A` is two
+  nested binders.
+- `not` stands before exactly one proposition: `not t in S` is `not (t in S)`.
 - `t notin S` and `not (t in S)` are different propositions. So are `A or B` and `B or A`.
 
 ## Stipulating
@@ -314,14 +322,32 @@ Assume (p): F(a) in Positives.
 Therefore (a, F(a)) in F.
 ```
 
-`F(x)` with `x` a rule variable cannot be written yet; inside a rule, use `(x, y) in F`.
+Inside a rule, `F(x)` with `x` a rule variable can be written: a variable is an object, so
+`F(x)` is an object too. Applying the rule to `a` turns `F(x)` into `F(a)`. If `F(a)` does not
+exist yet, the rule step makes it the way `Apply F to a` does, checking `a ∈ Domain(F)`; if the
+check fails the step does not go through, and what is missing is `a ∈ Domain(F)`.
+
+```v
+Let F be a map.
+Let a be an entity.
+Let Positives be a set.
+
+Apply Domain to F.
+Assume (h): a in Domain(F).
+
+Rule (pos): for every x, if x in Domain(F) then F(x) in Positives.
+By rule (pos) applied to (a), it follows that F(a) in Positives.
+Therefore F(a) in Positives.
+Therefore (a, F(a)) in F.
+```
 
 ## Propositions as objects
 
 `[A]` is the object representing proposition `A`, and `A` holds exactly when `[A] in Holds`.
-Writing either side makes the other follow. Representatives are structured — `(Mem, t, S)`,
-`(Not, a)`, `(All, a)` with bound variables as `(Var, k)` — so rules about propositions are
-ordinary rules:
+Writing either side makes the other follow — also when `[A]` is named later, or when the
+representative is written out as a tuple like `(Mem, t, S)` or built by a rule. Representatives are structured — `(Mem, t, S)`,
+`(Not, a)`, `(All, a)` with bound variables as `(Var, k)`, `F(x)` as `(App, F, x)` — so rules
+about propositions are ordinary rules:
 
 ```v
 Let t be an entity.
@@ -411,11 +437,13 @@ By rule (join) applied to (alice, bob, carol), it follows that alice manages car
 Therefore (alice, carol) in Boss.
 ```
 
-Template words used by the right-hand side are holes; the others are fixed words. The
-right-hand side is a proposition without quantifiers, and the names in it are resolved to
-objects when the notation is declared — so a rule variable cannot capture them. Two templates
-with the same shape are told apart with `where A in Vectors, B in Vectors`; if both match and
-cannot be told apart, it is an error.
+Template words used by the right-hand side are holes; the others are fixed words. A hole is
+a variable of the template, so the right-hand side is any proposition — with quantifiers, with
+`F(X)`. The names in it are resolved to objects when the notation is declared — so a rule
+variable cannot capture them. Two templates with the same shape are told apart with
+`where A in Vectors, B in Vectors`. A concrete filler is looked up in the matrix; a variable is
+looked up in what is assumed about it where the notation is used — the enclosing `if`, or the
+`in S` of its binder. If both match and cannot be told apart, it is an error.
 
 ## Built-in names
 
@@ -424,7 +452,7 @@ cannot be told apart, it is an error.
 `SimplifiedIf`, `Expanded`, `Instance`.
 
 **Tags for representatives and expressions:**
-`Mem`, `NotMem`, `And`, `Or`, `Implies`, `Iff`, `Not`, `All`, `Ex`, `Var`,
+`Mem`, `NotMem`, `And`, `Or`, `Implies`, `Iff`, `Not`, `All`, `Ex`, `Var`, `App`,
 `Plus`, `Minus`, `Times`, `Div`, `Pow`.
 
 **From the prelude:** `SET`, `RELATION`, `MAP`, `Domain`, `Eq`, `Function`, `TotalOn`, `Approx`,

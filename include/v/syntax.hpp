@@ -44,8 +44,11 @@ struct Stmt {
   PropId prop = kNoProp;
   std::vector<std::string> refs;   // labels referred to
   std::vector<Term> args;          // By rule applied to (...)
-  std::string setName;             // Take x with x ∈ S
-  std::vector<std::string> tupleElems;  // Let t = (a, b)
+  // By rule: the stated conclusion has F(a) for an `a` not established to be in Domain(F).
+  // The step does not go through; this says why when the rule itself does not.
+  std::string error;
+  Term set;                        // Take x with x ∈ S
+  std::vector<Term> tupleTerms;    // Let t = (a, b)
   bool isTupleLet = false;
   Term expr;       // Compute
   std::string letKind;  // Let: set / relation / map / entity

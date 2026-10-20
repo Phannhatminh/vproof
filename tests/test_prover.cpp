@@ -55,8 +55,9 @@ int main() {
     PropId b = w.atom(Term::of(x), Term::of(B), true);
     PropId c = w.atom(Term::of(x), Term::of(C), true);
     // Rule: for every y, if y ∈ A then y ∈ B.
-    PropId rule = w.forAll("y", w.implies(w.atom(Term::ofVar(0), Term::of(A), true),
-                                          w.atom(Term::ofVar(0), Term::of(B), true)));
+    ObjectId y = w.variable("y");
+    PropId rule = w.forAll(y, w.implies(w.atom(Term::of(y), Term::of(A), true),
+                                        w.atom(Term::of(y), Term::of(B), true)));
     p.assume(rule, 1);
 
     p.suppose(a, "h", 2);
@@ -74,18 +75,24 @@ int main() {
   {
     World w; Prover p(w);
     ObjectId A = w.declare("A"), B = w.declare("B");
-    PropId rule = w.forAll("y", w.implies(w.atom(Term::ofVar(0), Term::of(A), true),
-                                          w.atom(Term::ofVar(0), Term::of(B), true)));
+    ObjectId y = w.variable("y");
+    PropId rule = w.forAll(y, w.implies(w.atom(Term::of(y), Term::of(A), true),
+                                        w.atom(Term::of(y), Term::of(B), true)));
     p.assume(rule, 1);
 
     p.takeIn("x", A, 2);
     ObjectId fresh = p.freshOf();
     w.applyRule(rule, {fresh}, "rule", 3);
-    PropId stated = w.forAll("x", w.implies(w.atom(Term::ofVar(0), Term::of(A), true),
-                                            w.atom(Term::ofVar(0), Term::of(B), true)));
+    // The variable of the exit proposition is made inside the scope, as the parser does.
+    ObjectId x = w.variable("x");
+    PropId stated = w.forAll(x, w.implies(w.atom(Term::of(x), Term::of(A), true),
+                                          w.atom(Term::of(x), Term::of(B), true)));
     auto r = p.hence(stated, "subset", 4);
     check(r.ok, "exit with `for every x in A, x ∈ B`");
-    check(w.objectCount() == 2, "the temporary object is gone, A and B remain");
+    // The exit proposition is the rule's own proposition, binding the rule's variable: the
+    // variable made inside the scope goes with the rest.
+    check(r.prop == rule, "the exit proposition is the same proposition as the rule");
+    check(w.objectCount() == 3, "the temporary objects are gone; A, B and the rule's variable remain");
   }
 
   // --- `not` introduction: pointing out an absurdity inside a scope ---
@@ -115,8 +122,9 @@ int main() {
           "exhibit a witness: " + w.showProp(ex.prop));
 
     // Rule: for every z, if z ∈ P then z ∈ Q.
-    PropId rule = w.forAll("z", w.implies(w.atom(Term::ofVar(0), Term::of(P), true),
-                                          w.atom(Term::ofVar(0), Term::of(Q), true)));
+    ObjectId z = w.variable("z");
+    PropId rule = w.forAll(z, w.implies(w.atom(Term::of(z), Term::of(P), true),
+                                        w.atom(Term::of(z), Term::of(Q), true)));
     p.assume(rule, 3);
     p.takeFrom("w", ex.prop, 4);
     ObjectId witness = p.freshOf();

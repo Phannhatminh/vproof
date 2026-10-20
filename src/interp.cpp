@@ -60,36 +60,68 @@ void Interp::whyChain(PropId p, int depth, Report& rep) const {
   }
 }
 
-// Match a concrete term against a term with a bound variable at index `depth`.
-bool Interp::matchTerm(const Term& concrete, const Term& pattern, VarId depth,
-                       ObjectId& witness) const {
-  if (pattern.kind == TermKind::Var) {
-    if (pattern.var != depth) return concrete.kind == TermKind::Var && concrete.var == pattern.var;
-    if (concrete.kind != TermKind::Obj) return false;
-    if (witness != kNoObject && witness != concrete.obj) return false;  // must be the same witness
-    witness = concrete.obj;
+// Match a concrete object against an object of the pattern. `var` is the variable whose
+// object is being read off; `same` pairs each variable bound inside the pattern with the one
+// the concrete proposition binds at that place.
+bool Interp::matchObj(ObjectId concrete, ObjectId pattern, ObjectId var, Pairing& same,
+                      ObjectId& witness) const {
+  if (pattern == var) {
+    if (w_.obj(concrete).open) return false;
+    if (witness != kNoObject && witness != concrete) return false;  // must be the same witness
+    witness = concrete;
     return true;
   }
-  if (concrete.kind != pattern.kind) return false;
-  if (pattern.kind == TermKind::Obj) return concrete.obj == pattern.obj;
-  if (concrete.elems.size() != pattern.elems.size()) return false;
-  for (size_t i = 0; i < pattern.elems.size(); ++i)
-    if (!matchTerm(concrete.elems[i], pattern.elems[i], depth, witness)) return false;
+  auto s = same.find(pattern);
+  if (s != same.end()) return concrete == s->second;
+  const Object& p = w_.obj(pattern);
+  if (!p.open || p.variable) return concrete == pattern;
+  ObjectId pf, pa, cf, ca;
+  if (w_.appliedFrom(pattern, pf, pa))
+    return w_.appliedFrom(concrete, cf, ca) && matchObj(cf, pf, var, same, witness) &&
+           matchObj(ca, pa, var, same, witness);
+  const Object& c = w_.obj(concrete);
+  if (p.kind != Kind::Tuple || c.kind != Kind::Tuple || c.elems.size() != p.elems.size())
+    return false;
+  for (size_t i = 0; i < p.elems.size(); ++i)
+    if (!matchObj(c.elems[i], p.elems[i], var, same, witness)) return false;
   return true;
 }
 
-bool Interp::matchWitness(PropId concrete, PropId pattern, VarId depth,
+bool Interp::matchTerm(const Term& concrete, const Term& pattern, ObjectId var, Pairing& same,
+                       ObjectId& witness) const {
+  if (pattern.kind == TermKind::Obj) {
+    if (concrete.kind != TermKind::Obj) return false;
+    return matchObj(concrete.obj, pattern.obj, var, same, witness);
+  }
+  if (concrete.kind == TermKind::Obj) {
+    // A closed tuple is stored as one object; the pattern keeps the tuple shape, because a
+    // variable is in it. Match part by part.
+    const Object& c = w_.obj(concrete.obj);
+    if (c.kind != Kind::Tuple || c.elems.size() != pattern.elems.size()) return false;
+    for (size_t i = 0; i < pattern.elems.size(); ++i)
+      if (!matchTerm(Term::of(c.elems[i]), pattern.elems[i], var, same, witness)) return false;
+    return true;
+  }
+  if (concrete.elems.size() != pattern.elems.size()) return false;
+  for (size_t i = 0; i < pattern.elems.size(); ++i)
+    if (!matchTerm(concrete.elems[i], pattern.elems[i], var, same, witness)) return false;
+  return true;
+}
+
+bool Interp::matchWitness(PropId concrete, PropId pattern, ObjectId var, Pairing& same,
                           ObjectId& witness) const {
   const Prop& a = w_.prop(concrete);
   const Prop& b = w_.prop(pattern);
   if (a.kind != b.kind) return false;
   if (b.kind == PropKind::Atom)
-    return a.positive == b.positive && matchTerm(a.subject, b.subject, depth, witness) &&
-           matchTerm(a.column, b.column, depth, witness);
-  VarId inner = (b.kind == PropKind::ForAll || b.kind == PropKind::Exists) ? depth + 1 : depth;
-  if (b.left != kNoProp && !matchWitness(a.left, b.left, inner, witness)) return false;
-  if (b.right != kNoProp && !matchWitness(a.right, b.right, inner, witness)) return false;
-  return true;
+    return a.positive == b.positive && matchTerm(a.subject, b.subject, var, same, witness) &&
+           matchTerm(a.column, b.column, var, same, witness);
+  bool binds = b.kind == PropKind::ForAll || b.kind == PropKind::Exists;
+  if (binds) same[b.bound] = a.bound;
+  bool ok = (b.left == kNoProp || matchWitness(a.left, b.left, var, same, witness)) &&
+            (b.right == kNoProp || matchWitness(a.right, b.right, var, same, witness));
+  if (binds) same.erase(b.bound);
+  return ok;
 }
 
 Rational Interp::evalExpr(const Term& t, int line) {
@@ -112,18 +144,20 @@ Rational Interp::evalExpr(const Term& t, int line) {
 }
 
 void Interp::exec(const Stmt& s, Report& rep) {
+  try {
+    execStmt(s, rep);
+  } catch (const Unapplied& e) {
+    throw ParseError(s.line, e.what());
+  }
+}
+
+void Interp::execStmt(const Stmt& s, Report& rep) {
   switch (s.kind) {
     case StmtKind::Let: {
       if (s.isTupleLet) {
-        std::vector<Term> elems;
-        for (const std::string& e : s.tupleElems) {
-          auto it = names_.find(e);
-          if (it == names_.end()) throw ParseError(s.line, "not declared: " + e);
-          elems.push_back(Term::of(it->second));
-        }
         ObjectId t = w_.declare(s.names[0]);
         names_[s.names[0]] = t;
-        ObjectId built = w_.resolve(Term::ofTuple(elems));
+        ObjectId built = w_.resolve(Term::ofTuple(s.tupleTerms));
         // `Let t = (a, b)` writes into a mechanism relation, not into Eq.
         w_.tellIn(w_.tuple({t, built}), w_.tag("Defined"), Reason::stipulate(s.line));
       } else {
@@ -157,6 +191,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
       auto r = w_.applyRule(rule, args, s.refs[0], s.line);
       if (!r.ok)
         throw ParseError(s.line, "step does not go through, missing: " + w_.showProp(r.missing));
+      if (s.prop == kNoProp) throw ParseError(s.line, "step does not go through: " + s.error);
       if (r.conclusion != s.prop)
         throw ParseError(s.line, "stated conclusion does not match: the rule gives `" +
                                      w_.showProp(r.conclusion) + "`");
@@ -187,10 +222,17 @@ void Interp::exec(const Stmt& s, Report& rep) {
         // The witness is read off by one pass of matching the premise against the body of
         // the conclusion: wherever the body has the bound variable the premise has an
         // object, and all those places must hold the same object. Lookup, not trial.
+        //
+        // When the body does not mention the variable, the premise is the body itself and
+        // no witness is needed.
         ObjectId witness = kNoObject;
-        if (!matchWitness(ps[0], out.left, 0, witness) || witness == kNoObject)
+        Pairing same;
+        const auto& free = w_.prop(out.left).freeVars;
+        bool mentioned = std::binary_search(free.begin(), free.end(), out.bound);
+        if (mentioned &&
+            (!matchWitness(ps[0], out.left, out.bound, same, witness) || witness == kNoObject))
           throw ParseError(s.line, "cannot read a witness off the premise");
-        res = pv_.introExists(ps[0], witness, out.binderName, s.line);
+        res = pv_.introExistsAt(s.prop, ps[0], witness, s.line);
       } else {
         throw ParseError(s.line, "unrecognised step");
       }
@@ -221,9 +263,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
     }
 
     case StmtKind::TakeIn: {
-      auto it = names_.find(s.setName);
-      if (it == names_.end()) throw ParseError(s.line, "not declared: " + s.setName);
-      pv_.takeIn(s.names[0], it->second, s.line);
+      pv_.takeIn(s.names[0], w_.resolve(s.set), s.line);
       frames_.push_back({});
       names_[s.names[0]] = pv_.freshOf();
       frames_.back().names.push_back(s.names[0]);
@@ -277,31 +317,15 @@ void Interp::exec(const Stmt& s, Report& rep) {
         // as `SET ∈ SET`.
         auto it = names_.find(s.names[0]);
         if (it == names_.end()) throw ParseError(s.line, "not declared: " + s.names[0]);
-        applied_[{F, a}] = it->second;
-        w_.tellIn(w_.tuple({a, it->second}), F, Reason::stipulate(s.line));
+        w_.stipulateValue(F, a, it->second, s.line);
         return;
       }
 
-      // Function application is not a mechanism operation. In meaning it is a domain lookup
-      // followed by taking a witness; here it is done directly, with the domain check being
-      // an ordinary cell lookup. The domain is itself the result of another application.
-      // `Domain` is a name declared by the prelude, not a mechanism tag.
-      auto domIt = names_.find("Domain");
-      if (domIt == names_.end()) throw ParseError(s.line, "`Domain` is not defined");
-      auto d = applied_.find({domIt->second, F});
-      if (d == applied_.end())
-        throw ParseError(s.line, "Domain(" + w_.show(F) + ") does not exist yet — needs `Apply Domain to " +
-                                     w_.show(F) + ".` first");
-      if (!w_.toldIn(a, d->second))
-        throw ParseError(s.line, "not established: `" + w_.show(a) + " in " + w_.show(d->second) + "`");
-
-      auto have = applied_.find({F, a});
-      if (have != applied_.end()) return;  // canonical value already exists
-
-      ObjectId value = w_.declare(w_.show(F) + "(" + w_.show(a) + ")");
-      applied_[{F, a}] = value;
-      Reason why = Reason::derive("application", s.line);
-      w_.tellIn(w_.tuple({a, value}), F, std::move(why));
+      ObjectId have = w_.appliedValue(F, a);
+      if (have != kNoObject && w_.toldIn(w_.tuple({a, have}), F)) return;  // already applied
+      // The domain check and the value: the same step a rule takes when it puts `a` in place
+      // of x in `F(x)`.
+      ObjectId value = w_.apply(F, a, s.line, true);
       rep.lines.push_back("  appl line " + std::to_string(s.line) + ": " + w_.show(value));
       return;
     }
@@ -368,7 +392,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
         out.push_back(std::move(t));
       }
 
-      Parser replay(w_, names_, applied_, labels_);
+      Parser replay(w_, names_, labels_);
       replay.beginTokens(std::move(out));
       while (replay.more()) exec(replay.next(), rep);
       return;
@@ -384,7 +408,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
       // Substitution on representatives is not reimplemented: it decodes, uses the very
       // `instantiate` that rule application uses, and encodes again. So the two
       // substitutions cannot drift apart.
-      PropId inst = w_.instantiate(all, t);
+      PropId inst = w_.instantiate(all, t, s.line);
       w_.tellIn(w_.tuple({w_.represent(all), t, w_.represent(inst)}), w_.tag("Instance"),
                 Reason::derive("instance", s.line));
       bind(s.label, inst);
@@ -515,7 +539,7 @@ Interp::Report Interp::run(const std::string& source, bool keepGoing) {
   // written.
   for (const char* t : {"Mem", "NotMem", "And", "Or", "Implies", "Iff", "Not", "All", "Ex",
                         "Defined", "Computed", "NoValue",
-                        "Plus", "Minus", "Times", "Div", "Less", "LessEq", "Pow", "Simplified", "SimplifiedIf", "Expanded", "Var", "Instance"})
+                        "Plus", "Minus", "Times", "Div", "Less", "LessEq", "Pow", "Simplified", "SimplifiedIf", "Expanded", "Var", "App", "Instance"})
     names_[t] = w_.tag(t);
   names_["Holds"] = w_.holdsColumn();
   names_["Column"] = w_.columnTag();
@@ -525,9 +549,10 @@ Interp::Report Interp::run(const std::string& source, bool keepGoing) {
   if (!preludeLoaded_) {
     preludeLoaded_ = true;
     Report ignored;
-    Parser pre(w_, names_, applied_, labels_);
+    Parser pre(w_, names_, labels_);
     pre.begin(kPrelude);
     while (pre.more()) exec(pre.next(), ignored);
+    w_.setDomain(names_["Domain"]);
   }
   parser_.begin(source);
   while (parser_.more()) {
