@@ -7,7 +7,8 @@ bool Term::operator==(const Term& o) const {
   switch (kind) {
     case TermKind::Obj: return obj == o.obj;
     case TermKind::Var: return var == o.var;
-    case TermKind::Tuple: return elems == o.elems;
+    case TermKind::Tuple:
+    case TermKind::App: return elems == o.elems;
   }
   return false;
 }
@@ -17,7 +18,8 @@ bool Term::operator<(const Term& o) const {
   switch (kind) {
     case TermKind::Obj: return obj < o.obj;
     case TermKind::Var: return var < o.var;
-    case TermKind::Tuple: return elems < o.elems;
+    case TermKind::Tuple:
+    case TermKind::App: return elems < o.elems;
   }
   return false;
 }

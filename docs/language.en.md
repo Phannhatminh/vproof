@@ -314,7 +314,30 @@ Assume (p): F(a) in Positives.
 Therefore (a, F(a)) in F.
 ```
 
-`F(x)` with `x` a rule variable cannot be written yet; inside a rule, use `(x, y) in F`.
+Inside a rule, `F(x)` with `x` a rule variable can be written. A rule is kept as written:
+`F(x)` is a term of the rule, not an object. It is well formed only where `x ∈ Domain(F)` is
+assumed — the enclosing `if`, the left side of an `and` before it, the `in S` of its binder.
+This is the check made for `F(a)`, done on the form, the way a type is checked. Without it the
+rule cannot be written. `Domain(f)` with `f` a variable is the same, and needs `f ∈ MAP`
+(since `Domain(Domain)` is `MAP`). The right side of `or` does not see the left side. Applying
+the rule to `a` turns `F(x)` into the object `F(a)`; if it does not exist yet, the rule step
+makes it the way `Apply F to a` does, checking `a ∈ Domain(F)`, and if the check fails the step
+does not go through and what is missing is `a ∈ Domain(F)`. The conclusion stated in the
+`By rule` step itself gets `F(a)` made the same way.
+
+```v
+Let F be a map.
+Let a be an entity.
+Let Positives be a set.
+
+Apply Domain to F.
+Assume (h): a in Domain(F).
+
+Rule (pos): for every x, if x in Domain(F) then F(x) in Positives.
+By rule (pos) applied to (a), it follows that F(a) in Positives.
+Therefore F(a) in Positives.
+Therefore (a, F(a)) in F.
+```
 
 ## Propositions as objects
 
@@ -415,7 +438,9 @@ Template words used by the right-hand side are holes; the others are fixed words
 right-hand side is a proposition without quantifiers, and the names in it are resolved to
 objects when the notation is declared — so a rule variable cannot capture them. Two templates
 with the same shape are told apart with `where A in Vectors, B in Vectors`; if both match and
-cannot be told apart, it is an error.
+cannot be told apart, it is an error. `where` is also what is assumed about the holes, so
+`F(X)` on the right-hand side needs `X in Domain(F)` among the `where`. After the `in` of
+`where` comes any term.
 
 ## Built-in names
 
@@ -424,7 +449,7 @@ cannot be told apart, it is an error.
 `SimplifiedIf`, `Expanded`, `Instance`.
 
 **Tags for representatives and expressions:**
-`Mem`, `NotMem`, `And`, `Or`, `Implies`, `Iff`, `Not`, `All`, `Ex`, `Var`,
+`Mem`, `NotMem`, `And`, `Or`, `Implies`, `Iff`, `Not`, `All`, `Ex`, `Var`, `App`,
 `Plus`, `Minus`, `Times`, `Div`, `Pow`.
 
 **From the prelude:** `SET`, `RELATION`, `MAP`, `Domain`, `Eq`, `Function`, `TotalOn`, `Approx`,

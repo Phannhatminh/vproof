@@ -18,8 +18,6 @@ struct ParseError : std::runtime_error {
 // The parser builds propositions straight into World. Surface names live only here: bound
 // variables become de Bruijn indices, declared names become ObjectIds. The runtime never
 // sees a name.
-using AppliedMap = std::map<std::pair<ObjectId, ObjectId>, ObjectId>;
-
 class Parser {
  public:
   struct Token {
@@ -29,9 +27,9 @@ class Parser {
     bool number = false;
   };
 
-  Parser(World& w, std::map<std::string, ObjectId>& names, AppliedMap& applied,
+  Parser(World& w, std::map<std::string, ObjectId>& names,
          std::map<std::string, PropId>& labels)
-      : w_(w), names_(names), applied_(applied), labels_(labels) {}
+      : w_(w), names_(names), labels_(labels) {}
 
   // Parsing and running must interleave: a statement that declares a name must run before
   // later statements can look it up. So the parser hands out one statement at a time
@@ -85,15 +83,44 @@ class Parser {
 
   World& w_;
   std::map<std::string, ObjectId>& names_;
-  // Canonical value of a function at an argument, created by `Apply`. The parser needs it
-  // to read `F(a)`, so it sits alongside the name table.
-  AppliedMap& applied_;
   std::map<std::string, PropId>& labels_;
   std::vector<Token> toks_;
   size_t pos_ = 0;
   std::vector<std::string> binders_;  // innermost first; the index is the position
   std::vector<Notation> notations_;
   std::vector<std::string> holeNames_;  // open while parsing a Notation right-hand side
+
+  // What is assumed where the parser is: the `if` parts around, the left sides of `and`
+  // before it, the `in S` of the binders around, the `where` of a Notation. Each is kept
+  // with the number of binders open when it was assumed, so its variables can be shifted to
+  // the indices they have here.
+  struct Assumed {
+    PropId prop;
+    size_t depth;
+  };
+  std::vector<Assumed> assumed_;
+  // Off only while reading a Notation template the first time, to find its holes.
+  bool checkApply_ = true;
+  // While reading the conclusion of `By rule`: F(a) with no value yet is made there, the
+  // same as applying the rule makes it.
+  bool makeValues_ = false;
+  // F(x) with a variable in F or x: a term kept as written. It is well formed only where
+  // `x ∈ Domain(F)` is assumed — checked on the form, the way a type is.
+  Term applyTerm(const Term& fn, const Term& arg);
+  bool assumedIn(const Term& subject, const Term& column) const;
+  // Run `f` with `p` assumed.
+  template <class F>
+  auto withAssumed(const std::vector<PropId>& ps, F f) -> decltype(f()) {
+    for (PropId p : ps) assumed_.push_back({p, binders_.size()});
+    try {
+      auto out = f();
+      assumed_.resize(assumed_.size() - ps.size());
+      return out;
+    } catch (...) {
+      assumed_.resize(assumed_.size() - ps.size());
+      throw;
+    }
+  }
 };
 
 }  // namespace v

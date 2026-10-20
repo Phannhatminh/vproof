@@ -1,6 +1,7 @@
 #pragma once
 #include <deque>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -54,6 +55,15 @@ struct Cell {
 
 using Mark = size_t;  // position in the journal
 
+// `F(a)` with a concrete `a` that has no value yet, and the value cannot be made: `a` is not
+// established to be in Domain(F), or Domain(F) does not exist. `missing` is `a ∈ Domain(F)`
+// when that is what is missing.
+struct Unapplied : std::runtime_error {
+  PropId missing = kNoProp;
+  Unapplied(const std::string& msg, PropId missing)
+      : std::runtime_error(msg), missing(missing) {}
+};
+
 class World {
  public:
   // --- Object store ---
@@ -93,6 +103,10 @@ class World {
   const Prop& prop(PropId id) const { return props_[id]; }
   size_t propCount() const { return props_.size(); }
   std::string showProp(PropId id) const;
+  // The same, inside binders and Notation holes that are open where it is written, so their
+  // variables print with their names. `binders` is innermost first.
+  std::string showPropAt(PropId id, const std::vector<std::string>& binders,
+                         const std::vector<std::string>& holes = {}) const;
 
   // Store and look up. Ground atoms go into the matrix; everything else goes into the
   // store.
@@ -112,8 +126,13 @@ class World {
                        const std::string& label, int line);
 
   // Substitute an object for the outermost bound variable of a proposition with a binder.
-  PropId instantiate(PropId binderProp, ObjectId with);
-  // Fill the holes of a Notation template with terms.
+  // Where that turns F(x) into F(a) with a concrete a: with `check`, F(a) is made the way
+  // `Apply F to a` makes it, domain check included — applying a rule; without, only the
+  // object is made and nothing is stated about it — taking a witness, or checking what a
+  // scope proved.
+  PropId instantiate(PropId binderProp, ObjectId with, int line = 0, bool check = true);
+  // Fill the holes of a Notation template with terms. F(X) filled with a concrete a is the
+  // object F(a), made without a check if it does not exist.
   PropId fillHoles(PropId templateProp, const std::vector<Term>& args);
 
   // Split a premise joined by top-level `and` into a list of premises.
@@ -136,9 +155,25 @@ class World {
   // does not mention a witness that has disappeared.
   void objectsIn(PropId id, std::vector<ObjectId>& out) const;
 
-  // A ground term resolves to one object; a tuple term builds a tuple object.
+  // A ground term resolves to one object; a tuple term builds a tuple object. F(x) is never
+  // ground: once its parts are objects it is replaced by the object F(a).
   bool ground(const Term& t) const;
   ObjectId resolve(const Term& t);
+
+  // --- Function application ---
+  // The value of F at a, made by `Apply F to a`, or by a rule step putting a in place of x in
+  // F(x).
+  ObjectId appliedValue(ObjectId fn, ObjectId arg) const;
+  bool appliedFrom(ObjectId value, ObjectId& fn, ObjectId& arg) const;
+  // `Apply F to a as name`: the value is stipulated, without a domain check.
+  void stipulateValue(ObjectId fn, ObjectId arg, ObjectId value, int line);
+  // F(a) for concrete F and a. With `check`: the value is made, or the existing one is used,
+  // only when `a ∈ Domain(F)` holds, and `(a, F(a)) ∈ F` is written — the `Apply` step;
+  // otherwise it throws Unapplied. Without: the existing value, or a new object with
+  // nothing stated about it.
+  ObjectId apply(ObjectId fn, ObjectId arg, int line, bool check);
+  // Which object is `Domain`. Declared by the prelude, so it is handed over once that runs.
+  void setDomain(ObjectId domain) { domain_ = domain; }
 
   // --- Propositions as objects ---
   // The mechanism provides exactly one thing: the pairing. The pairing is lazy — a
@@ -166,7 +201,8 @@ class World {
 
  private:
   enum class Undo {
-    ObjectCreated, FlagRaised, ReasonAdded, PropCreated, PropTold, RepCreated, TagCreated
+    ObjectCreated, FlagRaised, ReasonAdded, PropCreated, PropTold, RepCreated, TagCreated,
+    ValueMade
   };
   struct Entry {
     Undo what;
@@ -181,6 +217,11 @@ class World {
   };
 
   PropId intern(Prop p);
+  // Put an object in place of the bound variable at `depth`; F(x) whose parts become objects
+  // turns into F(a).
+  Term substTerm(const Term& t, VarId depth, ObjectId with, int line, bool check);
+  Term fillTerm(const Term& t, const std::vector<Term>& args);
+  ObjectId makeValue(ObjectId fn, ObjectId arg);
   // Keep `Holds` in sync with the store, in both directions. This is an obligation of the
   // mechanism and is the trust surface of the whole reflection layer.
   void syncFromProp(PropId id, const Reason& why);
@@ -199,6 +240,9 @@ class World {
   std::map<PropId, ObjectId> repOf_;
   std::map<ObjectId, PropId> propOf_;
   std::map<std::string, ObjectId> tags_;
+  std::map<std::pair<ObjectId, ObjectId>, ObjectId> values_;  // (F, a) -> F(a)
+  std::map<ObjectId, std::pair<ObjectId, ObjectId>> madeFrom_;  // F(a) -> (F, a)
+  ObjectId domain_ = kNoObject;
   ObjectId holds_ = kNoObject;
   ObjectId column_ = kNoObject;
   std::vector<Entry> journal_;

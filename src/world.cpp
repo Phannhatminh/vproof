@@ -172,6 +172,12 @@ void World::rollback(Mark m) {
         propOf_.erase(e.object);
         break;
       }
+      case Undo::ValueMade: {
+        values_.erase(e.cell);
+        auto m = madeFrom_.find(e.object);
+        if (m != madeFrom_.end() && m->second == e.cell) madeFrom_.erase(m);
+        break;
+      }
       case Undo::TagCreated: {
         for (auto it = tags_.begin(); it != tags_.end(); ++it)
           if (it->second == e.object) {
@@ -262,6 +268,7 @@ bool World::ground(const Term& t) const {
   switch (t.kind) {
     case TermKind::Obj: return true;
     case TermKind::Var: return false;
+    case TermKind::App: return false;
     case TermKind::Tuple:
       for (const Term& e : t.elems)
         if (!ground(e)) return false;
@@ -275,6 +282,7 @@ ObjectId World::resolve(const Term& t) {
     case TermKind::Obj:
       return t.obj;
     case TermKind::Var:
+    case TermKind::App:
       throw std::runtime_error("term still has a free variable and cannot resolve to an object");
     case TermKind::Tuple: {
       std::vector<ObjectId> ids;
@@ -336,15 +344,21 @@ const std::vector<Reason>& World::propReasons(PropId id) const {
   return it == held_.end() ? none : it->second;
 }
 
-std::string World::showProp(PropId id) const {
-  std::vector<std::string> binders;  // innermost first
+std::string World::showProp(PropId id) const { return showPropAt(id, {}); }
+
+std::string World::showPropAt(PropId id, const std::vector<std::string>& open,
+                              const std::vector<std::string>& holes) const {
+  std::vector<std::string> binders = open;  // innermost first
   std::function<std::string(PropId)> go = [&](PropId cur) -> std::string {
     const Prop& p = props_[cur];
     std::function<std::string(const Term&)> term = [&](const Term& t) -> std::string {
       switch (t.kind) {
         case TermKind::Obj: return show(t.obj);
         case TermKind::Var:
+          if (t.var >= kHole && t.var - kHole < holes.size()) return holes[t.var - kHole];
           return t.var < binders.size() ? binders[t.var] : "?" + std::to_string(t.var);
+        case TermKind::App:
+          return term(t.elems[0]) + "(" + term(t.elems[1]) + ")";
         case TermKind::Tuple: {
           std::string out = "(";
           for (size_t i = 0; i < t.elems.size(); ++i)
@@ -381,40 +395,98 @@ std::string World::showProp(PropId id) const {
 
 // ---------------------------------------------------------------- rule application
 
-namespace {
+// ---------------------------------------------------------------- function application
+
+ObjectId World::appliedValue(ObjectId fn, ObjectId arg) const {
+  auto it = values_.find({fn, arg});
+  return it == values_.end() ? kNoObject : it->second;
+}
+
+bool World::appliedFrom(ObjectId value, ObjectId& fn, ObjectId& arg) const {
+  auto it = madeFrom_.find(value);
+  if (it == madeFrom_.end()) return false;
+  fn = it->second.first;
+  arg = it->second.second;
+  return true;
+}
+
+void World::stipulateValue(ObjectId fn, ObjectId arg, ObjectId value, int line) {
+  values_[{fn, arg}] = value;
+  journal_.push_back({Undo::ValueMade, value, {fn, arg}, true});
+  tellIn(tuple({arg, value}), fn, Reason::stipulate(line));
+}
+
+ObjectId World::makeValue(ObjectId fn, ObjectId arg) {
+  ObjectId value = declare(show(fn) + "(" + show(arg) + ")");
+  values_[{fn, arg}] = value;
+  madeFrom_[value] = {fn, arg};
+  journal_.push_back({Undo::ValueMade, value, {fn, arg}, true});
+  return value;
+}
+
+ObjectId World::apply(ObjectId fn, ObjectId arg, int line, bool check) {
+  ObjectId have = appliedValue(fn, arg);
+  if (!check) return have != kNoObject ? have : makeValue(fn, arg);
+  if (have != kNoObject && toldIn(tuple({arg, have}), fn)) return have;
+
+  // Function application is not a mechanism operation. In meaning it is a domain lookup
+  // followed by taking a witness; here it is done directly, with the domain check being
+  // an ordinary cell lookup. The domain is itself the result of another application.
+  if (domain_ == kNoObject) throw Unapplied("`Domain` is not defined", kNoProp);
+  ObjectId dom = appliedValue(domain_, fn);
+  if (dom == kNoObject)
+    throw Unapplied("Domain(" + show(fn) + ") does not exist yet — needs `Apply Domain to " +
+                        show(fn) + ".` first",
+                    kNoProp);
+  if (!toldIn(arg, dom))
+    throw Unapplied("not established: `" + show(arg) + " in " + show(dom) + "`",
+                    atom(Term::of(arg), Term::of(dom), true));
+
+  ObjectId value = have != kNoObject ? have : makeValue(fn, arg);
+  tellIn(tuple({arg, value}), fn, Reason::derive("application", line));
+  return value;
+}
+
+
+// ---------------------------------------------------------------- rule application
 
 // Replace Var(depth) with the object, and shift every free variable further out down by
-// one.
-Term substTerm(const Term& t, VarId depth, ObjectId with) {
+// one. F(x) whose parts are all objects afterwards is the object F(a).
+Term World::substTerm(const Term& t, VarId depth, ObjectId with, int line, bool check) {
   switch (t.kind) {
     case TermKind::Obj:
       return t;
     case TermKind::Var:
+      if (t.var >= kHole) return t;
       if (t.var == depth) return Term::of(with);
       return t.var > depth ? Term::ofVar(t.var - 1) : t;
     case TermKind::Tuple: {
       std::vector<Term> out;
       out.reserve(t.elems.size());
-      for (const Term& e : t.elems) out.push_back(substTerm(e, depth, with));
+      for (const Term& e : t.elems) out.push_back(substTerm(e, depth, with, line, check));
       return Term::ofTuple(std::move(out));
+    }
+    case TermKind::App: {
+      Term fn = substTerm(t.elems[0], depth, with, line, check);
+      Term arg = substTerm(t.elems[1], depth, with, line, check);
+      if (ground(fn) && ground(arg)) return Term::of(apply(resolve(fn), resolve(arg), line, check));
+      return Term::ofApp(std::move(fn), std::move(arg));
     }
   }
   return t;
 }
 
-}  // namespace
-
-PropId World::instantiate(PropId binderProp, ObjectId with) {
+PropId World::instantiate(PropId binderProp, ObjectId with, int line, bool check) {
   const Prop& b = props_[binderProp];
   if (b.kind != PropKind::ForAll && b.kind != PropKind::Exists)
     throw std::runtime_error("this proposition has no bound variable to substitute");
 
   std::function<PropId(PropId, VarId)> go = [&](PropId cur, VarId depth) -> PropId {
-    const Prop& p = props_[cur];
+    const Prop p = props_[cur];  // copied: building propositions may grow the store
     switch (p.kind) {
       case PropKind::Atom:
-        return atom(substTerm(p.subject, depth, with), substTerm(p.column, depth, with),
-                    p.positive);
+        return atom(substTerm(p.subject, depth, with, line, check),
+                    substTerm(p.column, depth, with, line, check), p.positive);
       case PropKind::And:     return conj(go(p.left, depth), go(p.right, depth));
       case PropKind::Or:      return disj(go(p.left, depth), go(p.right, depth));
       case PropKind::Implies: return implies(go(p.left, depth), go(p.right, depth));
@@ -428,26 +500,27 @@ PropId World::instantiate(PropId binderProp, ObjectId with) {
   return go(b.left, 0);
 }
 
-namespace {
-
-Term fillTerm(const Term& t, const std::vector<Term>& args) {
+Term World::fillTerm(const Term& t, const std::vector<Term>& args) {
   if (t.kind == TermKind::Var && t.var >= kHole) {
     size_t i = t.var - kHole;
     if (i >= args.size()) throw std::runtime_error("template is missing an argument");
     return args[i];
   }
-  if (t.kind != TermKind::Tuple) return t;
+  if (t.kind != TermKind::Tuple && t.kind != TermKind::App) return t;
   std::vector<Term> out;
   out.reserve(t.elems.size());
   for (const Term& e : t.elems) out.push_back(fillTerm(e, args));
+  if (t.kind == TermKind::App) {
+    if (ground(out[0]) && ground(out[1]))
+      return Term::of(apply(resolve(out[0]), resolve(out[1]), 0, false));
+    return Term::ofApp(std::move(out[0]), std::move(out[1]));
+  }
   return Term::ofTuple(std::move(out));
 }
 
-}  // namespace
-
 PropId World::fillHoles(PropId templateProp, const std::vector<Term>& args) {
   std::function<PropId(PropId)> go = [&](PropId cur) -> PropId {
-    const Prop& p = props_[cur];
+    const Prop p = props_[cur];
     switch (p.kind) {
       case PropKind::Atom:
         return atom(fillTerm(p.subject, args), fillTerm(p.column, args), p.positive);
@@ -487,12 +560,20 @@ World::StepResult World::applyRule(PropId rule, const std::vector<ObjectId>& arg
   // Peel the outermost binders one by one, substituting the objects the author supplied.
   PropId body = rule;
   std::vector<std::pair<std::string, ObjectId>> binding;
-  for (ObjectId a : args) {
-    const Prop& p = props_[body];
-    if (p.kind != PropKind::ForAll)
-      throw std::runtime_error("rule applied to more arguments than it has variables");
-    binding.emplace_back(p.binderName, a);
-    body = instantiate(body, a);
+  try {
+    for (ObjectId a : args) {
+      const Prop& p = props_[body];
+      if (p.kind != PropKind::ForAll)
+        throw std::runtime_error("rule applied to more arguments than it has variables");
+      binding.emplace_back(p.binderName, a);
+      body = instantiate(body, a, line);
+    }
+  } catch (const Unapplied& e) {
+    // F(a) has no value because `a ∈ Domain(F)` is not there: a premise of the step is
+    // missing, like any other.
+    if (e.missing == kNoProp) throw;
+    res.missing = e.missing;
+    return res;
   }
 
   // The body is either `if premises then conclusion`, or just the conclusion.
@@ -551,8 +632,16 @@ PropId World::rebuild(const PropTree& t) {
 }
 
 void World::objectsIn(PropId id, std::vector<ObjectId>& out) const {
+  // F(a) counts as mentioning a.
+  std::function<void(ObjectId)> obj = [&](ObjectId o) {
+    out.push_back(o);
+    auto m = madeFrom_.find(o);
+    if (m == madeFrom_.end()) return;
+    obj(m->second.first);
+    obj(m->second.second);
+  };
   std::function<void(const Term&)> term = [&](const Term& t) {
-    if (t.kind == TermKind::Obj) out.push_back(t.obj);
+    if (t.kind == TermKind::Obj) obj(t.obj);
     for (const Term& e : t.elems) term(e);
   };
   std::function<void(PropId)> go = [&](PropId cur) {
@@ -596,6 +685,8 @@ ObjectId World::representTerm(const Term& t) {
       return t.obj;
     case TermKind::Var:
       return tuple({tag("Var"), numeral(Rational(static_cast<long long>(t.var)))});
+    case TermKind::App:
+      return tuple({tag("App"), representTerm(t.elems[0]), representTerm(t.elems[1])});
     case TermKind::Tuple: {
       std::vector<ObjectId> ids;
       ids.reserve(t.elems.size());

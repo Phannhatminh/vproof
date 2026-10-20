@@ -38,6 +38,9 @@ struct Stmt {
   StmtKind kind = StmtKind::Assume;
   int line = 0;
   std::string text;  // verbatim, for error messages
+  // A step that was read but cannot run: the conclusion of `By rule` needs F(a), and F(a)
+  // cannot be made. Running the step reports this.
+  std::string error;
 
   std::vector<std::string> names;  // Let: declared names; Take: name of the fresh object
   std::string label;               // (h) names the proposition

@@ -311,7 +311,29 @@ Assume (p): F(a) in Positives.
 Therefore (a, F(a)) in F.
 ```
 
-`F(x)` với `x` là biến của luật hiện chưa viết được; trong luật hãy dùng `(x, y) in F`.
+Trong luật, `F(x)` với `x` là biến của luật viết được. Luật được giữ đúng như viết: `F(x)` là
+một term của luật, không phải đối tượng. Nó chỉ hợp lệ ở chỗ `x ∈ Domain(F)` được giả sử —
+phần `if` bao quanh, vế trái của `and` đứng trước, `in S` của binder. Đây là phép kiểm như
+với `F(a)`, làm trên hình thức, như kiểm kiểu. Không có thì luật không viết được. `Domain(f)`
+với `f` là biến cũng vậy, cần `f ∈ MAP` (vì `Domain(Domain)` là `MAP`). Vế phải của `or`
+không thấy vế trái. Áp luật cho `a` thì `F(x)` thành đối tượng `F(a)`; chưa có thì bước áp
+luật tạo ra nó như `Apply F to a`, có kiểm `a ∈ Domain(F)`, kiểm không qua thì bước không đi
+qua và thứ thiếu là `a ∈ Domain(F)`. Kết luận nêu trong chính câu `By rule` cũng được tạo
+`F(a)` theo cách đó.
+
+```v
+Let F be a map.
+Let a be an entity.
+Let Positives be a set.
+
+Apply Domain to F.
+Assume (h): a in Domain(F).
+
+Rule (pos): for every x, if x in Domain(F) then F(x) in Positives.
+By rule (pos) applied to (a), it follows that F(a) in Positives.
+Therefore F(a) in Positives.
+Therefore (a, F(a)) in F.
+```
 
 ## Mệnh đề là đối tượng
 
@@ -409,7 +431,9 @@ Therefore (alice, carol) in Boss.
 Chữ trong mẫu mà vế phải dùng tới là lỗ; chữ còn lại là chữ cố định. Vế phải là một mệnh đề
 không chứa lượng từ, và tên trong nó được quy về đối tượng ngay lúc khai báo — nên không bị
 biến của luật bắt mất. Hai mẫu cùng hình dạng phân biệt bằng
-`where A in Vectors, B in Vectors`; cùng khớp mà không phân biệt được thì báo lỗi.
+`where A in Vectors, B in Vectors`; cùng khớp mà không phân biệt được thì báo lỗi. `where` cũng
+là những gì giả sử về lỗ, nên `F(X)` ở vế phải cần `X in Domain(F)` trong `where`. Sau `in`
+của `where` là term bất kỳ.
 
 ## Tên có sẵn
 
@@ -418,7 +442,7 @@ biến của luật bắt mất. Hai mẫu cùng hình dạng phân biệt bằn
 `SimplifiedIf`, `Expanded`, `Instance`.
 
 **Nhãn dựng đại diện và biểu thức:**
-`Mem`, `NotMem`, `And`, `Or`, `Implies`, `Iff`, `Not`, `All`, `Ex`, `Var`,
+`Mem`, `NotMem`, `And`, `Or`, `Implies`, `Iff`, `Not`, `All`, `Ex`, `Var`, `App`,
 `Plus`, `Minus`, `Times`, `Div`, `Pow`.
 
 **Của prelude:** `SET`, `RELATION`, `MAP`, `Domain`, `Eq`, `Function`, `TotalOn`, `Approx`,

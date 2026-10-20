@@ -43,11 +43,10 @@ class Interp {
   bool matchWitness(PropId concrete, PropId pattern, VarId depth, ObjectId& witness) const;
 
   std::map<std::string, ObjectId> names_;
-  AppliedMap applied_;
   std::map<std::string, PropId> labels_;
   World w_;
   Prover pv_{w_};
-  Parser parser_{w_, names_, applied_, labels_};
+  Parser parser_{w_, names_, labels_};
   // Labels and names declared inside a scope live only in that scope: on exit, the
   // propositions and objects they point at have been removed from the world.
   struct Frame {

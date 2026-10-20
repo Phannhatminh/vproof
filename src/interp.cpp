@@ -70,6 +70,21 @@ bool Interp::matchTerm(const Term& concrete, const Term& pattern, VarId depth,
     witness = concrete.obj;
     return true;
   }
+  if (pattern.kind == TermKind::App && concrete.kind == TermKind::Obj) {
+    // F(x) in the pattern against the object F(a): match F and a.
+    ObjectId fn, arg;
+    if (!w_.appliedFrom(concrete.obj, fn, arg)) return false;
+    return matchTerm(Term::of(fn), pattern.elems[0], depth, witness) &&
+           matchTerm(Term::of(arg), pattern.elems[1], depth, witness);
+  }
+  if (pattern.kind == TermKind::Tuple && concrete.kind == TermKind::Obj) {
+    // A tuple pattern against a tuple object: match the parts.
+    const Object& o = w_.obj(concrete.obj);
+    if (o.kind != Kind::Tuple || o.elems.size() != pattern.elems.size()) return false;
+    for (size_t i = 0; i < o.elems.size(); ++i)
+      if (!matchTerm(Term::of(o.elems[i]), pattern.elems[i], depth, witness)) return false;
+    return true;
+  }
   if (concrete.kind != pattern.kind) return false;
   if (pattern.kind == TermKind::Obj) return concrete.obj == pattern.obj;
   if (concrete.elems.size() != pattern.elems.size()) return false;
@@ -151,6 +166,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
     }
 
     case StmtKind::ByRule: {
+      if (s.prop == kNoProp) throw ParseError(s.line, "step does not go through: " + s.error);
       PropId rule = ref(s.refs[0], s.line);
       std::vector<ObjectId> args;
       for (const Term& a : s.args) args.push_back(w_.resolve(a));
@@ -277,8 +293,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
         // as `SET ∈ SET`.
         auto it = names_.find(s.names[0]);
         if (it == names_.end()) throw ParseError(s.line, "not declared: " + s.names[0]);
-        applied_[{F, a}] = it->second;
-        w_.tellIn(w_.tuple({a, it->second}), F, Reason::stipulate(s.line));
+        w_.stipulateValue(F, a, it->second, s.line);
         return;
       }
 
@@ -288,21 +303,20 @@ void Interp::exec(const Stmt& s, Report& rep) {
       // `Domain` is a name declared by the prelude, not a mechanism tag.
       auto domIt = names_.find("Domain");
       if (domIt == names_.end()) throw ParseError(s.line, "`Domain` is not defined");
-      auto d = applied_.find({domIt->second, F});
-      if (d == applied_.end())
+      ObjectId dom = w_.appliedValue(domIt->second, F);
+      if (dom == kNoObject)
         throw ParseError(s.line, "Domain(" + w_.show(F) + ") does not exist yet — needs `Apply Domain to " +
                                      w_.show(F) + ".` first");
-      if (!w_.toldIn(a, d->second))
-        throw ParseError(s.line, "not established: `" + w_.show(a) + " in " + w_.show(d->second) + "`");
+      if (!w_.toldIn(a, dom))
+        throw ParseError(s.line, "not established: `" + w_.show(a) + " in " + w_.show(dom) + "`");
 
-      auto have = applied_.find({F, a});
-      if (have != applied_.end()) return;  // canonical value already exists
-
-      ObjectId value = w_.declare(w_.show(F) + "(" + w_.show(a) + ")");
-      applied_[{F, a}] = value;
-      Reason why = Reason::derive("application", s.line);
-      w_.tellIn(w_.tuple({a, value}), F, std::move(why));
-      rep.lines.push_back("  appl line " + std::to_string(s.line) + ": " + w_.show(value));
+      // The value may already exist: made by a rule step, or as F(x) of a witness — then
+      // only `(a, F(a)) ∈ F` may be missing.
+      ObjectId have = w_.appliedValue(F, a);
+      if (have != kNoObject && w_.toldIn(w_.tuple({a, have}), F)) return;
+      ObjectId value = w_.apply(F, a, s.line, true);
+      if (have == kNoObject)
+        rep.lines.push_back("  appl line " + std::to_string(s.line) + ": " + w_.show(value));
       return;
     }
 
@@ -368,7 +382,7 @@ void Interp::exec(const Stmt& s, Report& rep) {
         out.push_back(std::move(t));
       }
 
-      Parser replay(w_, names_, applied_, labels_);
+      Parser replay(w_, names_, labels_);
       replay.beginTokens(std::move(out));
       while (replay.more()) exec(replay.next(), rep);
       return;
@@ -384,7 +398,12 @@ void Interp::exec(const Stmt& s, Report& rep) {
       // Substitution on representatives is not reimplemented: it decodes, uses the very
       // `instantiate` that rule application uses, and encodes again. So the two
       // substitutions cannot drift apart.
-      PropId inst = w_.instantiate(all, t);
+      PropId inst;
+      try {
+        inst = w_.instantiate(all, t, s.line);
+      } catch (const Unapplied& e) {
+        throw ParseError(s.line, e.what());
+      }
       w_.tellIn(w_.tuple({w_.represent(all), t, w_.represent(inst)}), w_.tag("Instance"),
                 Reason::derive("instance", s.line));
       bind(s.label, inst);
@@ -525,9 +544,10 @@ Interp::Report Interp::run(const std::string& source, bool keepGoing) {
   if (!preludeLoaded_) {
     preludeLoaded_ = true;
     Report ignored;
-    Parser pre(w_, names_, applied_, labels_);
+    Parser pre(w_, names_, labels_);
     pre.begin(kPrelude);
     while (pre.more()) exec(pre.next(), ignored);
+    w_.setDomain(names_["Domain"]);
   }
   parser_.begin(source);
   while (parser_.more()) {

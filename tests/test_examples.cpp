@@ -107,6 +107,7 @@ int main(int argc, char** argv) {
   runFile(dir + "/column.v", 4);
   runFile(dir + "/induction.v", 2);
   runFile(dir + "/reals.v", 2);
+  runFile(dir + "/rulefn.v", 8);
 
   // A cell nobody has spoken about checks as neither polarity — which is not the same as
   // "false".
@@ -175,6 +176,41 @@ int main(int argc, char** argv) {
               "Assume (h): a in Domain(F).\n"
               "Assume (p): F(a) in P.\n",
               "does not exist yet — needs `Apply F to");
+
+  expectError("a rule with F(x), applied where the argument is not known to be in the domain",
+              "Let F be a map.\n"
+              "Let a be an entity.\n"
+              "Let P be a set.\n"
+              "Apply Domain to F.\n"
+              "Rule (r): for every x, if x in Domain(F) then F(x) in P.\n"
+              "By rule (r) applied to (a), it follows that F(a) in P.\n",
+              "not established: `a in Domain(F)`");
+
+  expectError("F(x) in a rule where x is not assumed to be in the domain",
+              "Let F be a map.\n"
+              "Let P be a set.\n"
+              "Apply Domain to F.\n"
+              "Rule (r): for every x, F(x) in P.\n",
+              "cannot be written here — not established: `x ∈ Domain(F)`");
+
+  expectError("Domain(f) for a variable f not assumed to be a map",
+              "Let P be a set.\n"
+              "Rule (r): for every f, y, if y in Domain(f) then f(y) in P.\n",
+              "cannot be written here — not established: `f ∈ MAP`");
+
+  expectError("the right side of `or` does not see the left side",
+              "Let F be a map.\n"
+              "Let P be a set.\n"
+              "Apply Domain to F.\n"
+              "Rule (r): for every x, x in Domain(F) or F(x) in P.\n",
+              "cannot be written here");
+
+  expectError("F(X) in a Notation needs X in Domain(F) among its `where`",
+              "Let F be a map.\n"
+              "Let P be a set.\n"
+              "Apply Domain to F.\n"
+              "Notation: \"img X\" means F(X) in P.\n",
+              "cannot be written here — not established: `X ∈ Domain(F)`");
 
   expectError("applying a function before the argument is known to be in the domain",
               "Let F be a map.\n"

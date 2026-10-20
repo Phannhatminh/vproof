@@ -88,14 +88,31 @@ Prover::Result Prover::introExists(PropId instance, ObjectId witness,
   // Abstraction: every mention of the witness becomes the bound variable of a new binder.
   std::function<Term(const Term&, VarId)> absTerm = [&](const Term& t, VarId depth) -> Term {
     switch (t.kind) {
-      case TermKind::Obj:
-        return t.obj == witness ? Term::ofVar(depth) : t;
+      case TermKind::Obj: {
+        if (t.obj == witness) return Term::ofVar(depth);
+        // F(w) made from the witness is F(x) of the new variable; a tuple with the witness
+        // inside is opened up so its parts can be.
+        ObjectId fn, arg;
+        if (w_.appliedFrom(t.obj, fn, arg)) {
+          Term f = absTerm(Term::of(fn), depth), a = absTerm(Term::of(arg), depth);
+          if (!w_.ground(f) || !w_.ground(a)) return Term::ofApp(f, a);
+        }
+        const Object& o = w_.obj(t.obj);
+        if (o.kind == Kind::Tuple) {
+          std::vector<Term> out;
+          for (ObjectId e : o.elems) out.push_back(absTerm(Term::of(e), depth));
+          for (const Term& e : out)
+            if (!w_.ground(e)) return Term::ofTuple(std::move(out));
+        }
+        return t;
+      }
       case TermKind::Var:
         return Term::ofVar(t.var + 1);  // make room for the new outer binder
-      case TermKind::Tuple: {
+      case TermKind::Tuple:
+      case TermKind::App: {
         std::vector<Term> out;
         for (const Term& e : t.elems) out.push_back(absTerm(e, depth));
-        return Term::ofTuple(std::move(out));
+        return t.kind == TermKind::App ? Term::ofApp(out[0], out[1]) : Term::ofTuple(std::move(out));
       }
     }
     return t;
@@ -274,7 +291,7 @@ Prover::Result Prover::takeFrom(const std::string& name, PropId existential, int
   scopes_.push_back(s);
 
   // Witnesses are always fresh: each time a different object is taken out.
-  PropId about = w_.instantiate(existential, s.fresh);
+  PropId about = w_.instantiate(existential, s.fresh, line, false);
   Reason why = Reason::derive("take", line);
   why.antecedents = {Antecedent{existential}};
   w_.tell(about, std::move(why));
@@ -304,13 +321,13 @@ Prover::Result Prover::hence(PropId stated, const std::string& label, int line) 
     }
     case ScopeKind::Take: {
       if (out.kind != PropKind::ForAll) return fail("the exit proposition must be `for every …`");
-      PropId inner = w_.instantiate(stated, s.fresh);
+      PropId inner = w_.instantiate(stated, s.fresh, line, false);
       if (!w_.holds(inner)) return missing(inner);
       break;
     }
     case ScopeKind::TakeIn: {
       if (out.kind != PropKind::ForAll) return fail("the exit proposition must be `for every …`");
-      PropId inner = w_.instantiate(stated, s.fresh);
+      PropId inner = w_.instantiate(stated, s.fresh, line, false);
       const Prop& i = w_.prop(inner);
       if (i.kind != PropKind::Implies || i.left != s.membership)
         return fail("the exit proposition must be `for every x, if x ∈ S then …`");

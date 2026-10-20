@@ -17,7 +17,11 @@ constexpr VarId kHole = 1u << 20;
 
 // A term in either position of an atomic proposition. Leaves are handles, not surface names
 // — that is where the old version broke, and it is what lets the runtime stand on its own.
-enum class TermKind { Obj, Var, Tuple };
+//
+// App is `F(x)` with a variable in F or x, kept as written: elems are {F, x}. A rule only has
+// to be well formed to be written; F(x) becomes an object, F(a), when a rule step puts an
+// object in place of x.
+enum class TermKind { Obj, Var, Tuple, App };
 
 struct Term {
   TermKind kind = TermKind::Obj;
@@ -41,6 +45,12 @@ struct Term {
     Term t;
     t.kind = TermKind::Tuple;
     t.elems = std::move(elems);
+    return t;
+  }
+  static Term ofApp(Term fn, Term arg) {
+    Term t;
+    t.kind = TermKind::App;
+    t.elems = {std::move(fn), std::move(arg)};
     return t;
   }
 

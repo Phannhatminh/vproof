@@ -204,25 +204,91 @@ Term Parser::atomTerm() {
   }
   if (!atWord()) err("expected a term, got `" + peek().text + "`");
   Token t = take();
-  if (at("(")) {
-    // `F(a)` is function application: it points at the object created by an `Apply F to a.`
-    // step. Until that step has run, no object has this name.
-    take();
-    Term arg = term();
-    expect(")");
-    auto it = applied_.find({lookup(t.text), w_.resolve(arg)});
-    if (it == applied_.end())
-      err("`" + t.text + "(...)` does not exist yet — needs `Apply " + t.text + " to ...` first");
-    return Term::of(it->second);
-  }
   // Notation holes are looked up first — they are only open while parsing a right-hand
-  // side.
-  for (size_t i = 0; i < holeNames_.size(); ++i)
-    if (holeNames_[i] == t.text) return Term::ofVar(kHole + static_cast<VarId>(i));
-  // Then bound variables: the index is the position in the binder stack.
-  for (size_t i = 0; i < binders_.size(); ++i)
-    if (binders_[i] == t.text) return Term::ofVar(static_cast<VarId>(i));
-  return Term::of(lookup(t.text));
+  // side. Then bound variables: the index is the position in the binder stack.
+  Term name;
+  bool found = false;
+  for (size_t i = 0; i < holeNames_.size() && !found; ++i)
+    if (holeNames_[i] == t.text) {
+      name = Term::ofVar(kHole + static_cast<VarId>(i));
+      found = true;
+    }
+  for (size_t i = 0; i < binders_.size() && !found; ++i)
+    if (binders_[i] == t.text) {
+      name = Term::ofVar(static_cast<VarId>(i));
+      found = true;
+    }
+  if (!found) name = Term::of(lookup(t.text));
+  if (!at("(")) return name;
+
+  // `F(a)` is function application. With a concrete F and a it points at the object created
+  // by an `Apply F to a.` step; until that step has run, no object has this name. With a
+  // variable in F or a it is F(x) as written, checked to be well formed.
+  take();
+  Term arg = term();
+  expect(")");
+  if (!w_.ground(name) || !w_.ground(arg)) return applyTerm(name, arg);
+  ObjectId value = w_.appliedValue(name.obj, w_.resolve(arg));
+  // In the conclusion of `By rule`, F(a) with no value yet is made there, the same as
+  // applying the rule makes it.
+  if (value == kNoObject && makeValues_) value = w_.apply(name.obj, w_.resolve(arg), t.line, true);
+  if (value == kNoObject)
+    err("`" + t.text + "(...)` does not exist yet — needs `Apply " + t.text + " to ...` first");
+  return Term::of(value);
+}
+
+namespace {
+
+// Move the variables of a term assumed `by` binders further out to the indices they have
+// here. Holes are not binders and do not move.
+Term shifted(const Term& t, size_t by) {
+  if (t.kind == TermKind::Var)
+    return t.var >= kHole ? t : Term::ofVar(t.var + static_cast<VarId>(by));
+  if (t.kind == TermKind::Obj) return t;
+  Term out = t;
+  for (Term& e : out.elems) e = shifted(e, by);
+  return out;
+}
+
+}  // namespace
+
+bool Parser::assumedIn(const Term& subject, const Term& column) const {
+  for (const Assumed& a : assumed_) {
+    size_t by = binders_.size() - a.depth;
+    for (PropId q : w_.premisesOf(a.prop)) {
+      const Prop& p = w_.prop(q);
+      if (p.kind != PropKind::Atom || !p.positive) continue;
+      if (shifted(p.subject, by) == subject && shifted(p.column, by) == column) return true;
+    }
+  }
+  return false;
+}
+
+Term Parser::applyTerm(const Term& fn, const Term& arg) {
+  // The same check as for F(a), done on the form: `x ∈ Domain(F)` must be among what is
+  // assumed here. Domain(F) for a concrete F is the value already made; for a variable f it
+  // is Domain(f), itself checked — it needs `f ∈ Domain(Domain)`, that is `f ∈ MAP`.
+  auto dIt = names_.find("Domain");
+  if (dIt == names_.end()) err("`Domain` is not defined");
+  ObjectId domain = dIt->second;
+  Term dom;
+  if (w_.ground(fn)) {
+    ObjectId F = w_.resolve(fn);
+    ObjectId d = w_.appliedValue(domain, F);
+    if (d == kNoObject)
+      err("Domain(" + w_.show(F) + ") does not exist yet — needs `Apply Domain to " + w_.show(F) +
+          ".` first");
+    dom = Term::of(d);
+  } else {
+    dom = applyTerm(Term::of(domain), fn);
+  }
+  if (checkApply_ && !assumedIn(arg, dom)) {
+    // Shown through a proposition, so variables print with their names.
+    PropId shown = w_.atom(arg, dom, true);
+    std::string what = w_.showPropAt(shown, binders_, holeNames_);
+    err("`F(x)` cannot be written here — not established: `" + what + "`");
+  }
+  return Term::ofApp(fn, arg);
 }
 
 // -------------------------------------------------------------- propositions
@@ -248,7 +314,9 @@ PropId Parser::andLevel() {
   PropId left = primary();
   while (at("and")) {
     take();
-    left = w_.conj(left, primary());
+    // The left side is assumed while reading the right: `x in Domain(F) and F(x) in S`.
+    PropId right = withAssumed({left}, [&] { return primary(); });
+    left = w_.conj(left, right);
   }
   return left;
 }
@@ -332,7 +400,8 @@ PropId Parser::primary() {
   if (accept("if")) {
     PropId a = proposition();
     expect("then");
-    return w_.implies(a, proposition());
+    PropId b = withAssumed({a}, [&] { return proposition(); });
+    return w_.implies(a, b);
   }
   if (at("for") && peek(1).text == "every") {
     take(); take();
@@ -378,15 +447,23 @@ PropId Parser::primary() {
     // The first variable in the list is the outermost binder, so it gets the largest index;
     // the last variable is innermost, index 0.
     for (const std::string& v : vars) binders_.insert(binders_.begin(), v);
-    PropId body = proposition();
+    // `for every x, y in S, A` abbreviates nested membership guards.
+    std::vector<PropId> guards;
     if (!setName.empty()) {
-      // `for every x, y in S, A` abbreviates nested membership guards.
       ObjectId set = lookup(setName);
       for (size_t i = 0; i < vars.size(); ++i) {
         VarId idx = static_cast<VarId>(vars.size() - 1 - i);
-        body = w_.implies(w_.atom(Term::ofVar(idx), Term::of(set), true), body);
+        guards.push_back(w_.atom(Term::ofVar(idx), Term::of(set), true));
       }
     }
+    PropId body;
+    try {
+      body = withAssumed(guards, [&] { return proposition(); });
+    } catch (...) {
+      binders_.erase(binders_.begin(), binders_.begin() + vars.size());
+      throw;
+    }
+    for (PropId g : guards) body = w_.implies(g, body);
     for (size_t i = 0; i < vars.size(); ++i) {
       body = w_.forAll(binders_.front(), body);
       binders_.erase(binders_.begin());
@@ -401,9 +478,16 @@ PropId Parser::primary() {
     expect("such");
     expect("that");
     binders_.insert(binders_.begin(), var);
-    PropId body = proposition();
-    if (!setName.empty())
-      body = w_.conj(w_.atom(Term::ofVar(0), Term::of(lookup(setName)), true), body);
+    std::vector<PropId> guards;
+    if (!setName.empty()) guards.push_back(w_.atom(Term::ofVar(0), Term::of(lookup(setName)), true));
+    PropId body;
+    try {
+      body = withAssumed(guards, [&] { return proposition(); });
+    } catch (...) {
+      binders_.erase(binders_.begin());
+      throw;
+    }
+    if (!guards.empty()) body = w_.conj(guards[0], body);
     binders_.erase(binders_.begin());
     return w_.exists(var, body);
   }
@@ -524,7 +608,23 @@ Stmt Parser::statement() {
     }
     expect(",");
     expect("it"); expect("follows"); expect("that");
-    s.prop = proposition();
+    makeValues_ = true;
+    try {
+      s.prop = proposition();
+    } catch (const Unapplied& e) {
+      makeValues_ = false;
+      // F(a) cannot be made. The statement is still read to its end, so the run can go on;
+      // running it says what is missing.
+      s.prop = kNoProp;
+      s.error = e.what();
+      while (!at(".") && !peek().text.empty()) take();
+      expect(".");
+      return s;
+    } catch (...) {
+      makeValues_ = false;
+      throw;
+    }
+    makeValues_ = false;
     if (accept("as")) s.label = labelOpt();
     expect(".");
     return s;
@@ -672,7 +772,16 @@ Stmt Parser::statement() {
     // two reads it again with exactly those. Unused words are fixed words.
     size_t rhs = pos_;
     holeNames_ = words;
-    PropId first = proposition();
+    // Pass one only finds the holes; F(X) is checked in pass two, against the `where`.
+    checkApply_ = false;
+    PropId first;
+    try {
+      first = proposition();
+    } catch (...) {
+      checkApply_ = true;
+      throw;
+    }
+    checkApply_ = true;
 
     std::vector<bool> used(words.size(), false);
     std::function<void(const Term&)> markTerm = [&](const Term& t) {
@@ -704,22 +813,41 @@ Stmt Parser::statement() {
       }
     }
 
-    pos_ = rhs;
-    n.tmpl = proposition();
-
-    // `where A in Vectors, B in Vectors` — overload resolution guards.
-    if (accept("where")) {
-      do {
-        std::string hole = take().text;
-        expect("in");
-        ObjectId set = lookup(take().text);
-        size_t idx = holeNames_.size();
-        for (size_t i = 0; i < holeNames_.size(); ++i)
-          if (holeNames_[i] == hole) idx = i;
-        if (idx == holeNames_.size()) err("`" + hole + "` is not a hole of the template");
-        n.guards.push_back({idx, set});
-      } while (accept(","));
+    // `where A in Vectors, B in Vectors` — overload resolution guards. They are what is
+    // assumed about the holes, so they are read before the right-hand side: F(X) there needs
+    // `X in Domain(F)` among them.
+    std::vector<PropId> whereProps;
+    size_t end = pos_;
+    {
+      size_t k = rhs;
+      int depth = 0;
+      while (k < toks_.size() &&
+             !(depth == 0 && (toks_[k].text == "where" || toks_[k].text == "."))) {
+        if (toks_[k].text == "(" || toks_[k].text == "[") ++depth;
+        if (toks_[k].text == ")" || toks_[k].text == "]") --depth;
+        ++k;
+      }
+      if (k < toks_.size() && toks_[k].text == "where") {
+        pos_ = k + 1;
+        do {
+          std::string hole = take().text;
+          expect("in");
+          ObjectId set = w_.resolve(term());
+          size_t idx = holeNames_.size();
+          for (size_t i = 0; i < holeNames_.size(); ++i)
+            if (holeNames_[i] == hole) idx = i;
+          if (idx == holeNames_.size()) err("`" + hole + "` is not a hole of the template");
+          n.guards.push_back({idx, set});
+          whereProps.push_back(
+              w_.atom(Term::ofVar(kHole + static_cast<VarId>(idx)), Term::of(set), true));
+        } while (accept(","));
+        end = pos_;
+      }
     }
+
+    pos_ = rhs;
+    n.tmpl = withAssumed(whereProps, [&] { return proposition(); });
+    if (at("where")) pos_ = end;
     expect(".");
     holeNames_.clear();
 

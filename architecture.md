@@ -191,9 +191,22 @@ Thiếu tiền đề thì bước không đi được: không đối tượng n�
 ghi, và lỗi chỉ đúng chỗ thiếu. Nhắc `F(a)` ở bất cứ đâu trước khi bước áp xảy ra cũng
 không đi được.
 
-Giới hạn hiện có: `F(x)` với `x` là biến của một luật **chưa** viết được, vì `F(a)` được quy
-về đối tượng ngay lúc parse, mà biến thì chưa có đối tượng. Trong luật phải nói qua quan hệ:
-`(x, y) ∈ F` thay cho `F(x) = y`.
+Trong luật, `F(x)` với `x` là biến của luật là một term riêng, `App`, giữ đúng như viết; luật
+chỉ cần đúng hình thức để được ghi. Phép kiểm là phép kiểm của `F(a)`, làm trên hình thức như
+kiểm kiểu: `x ∈ Domain(F)` phải nằm trong những gì được giả sử ở chỗ viết — `in S` của binder,
+phần `if` bao quanh, vế trái của `and` đứng trước, `where` của Notation. Mỗi giả sử được giữ
+kèm số binder lúc đó, nên chỉ số de Bruijn của nó được dời cho khớp ở chỗ so. `Domain(F)` với
+`F` cụ thể là giá trị đã có; với biến `f` là `Domain(f)`, cũng là một `App` và cũng qua phép
+kiểm, cần `f ∈ Domain(Domain)`, tức `f ∈ MAP`.
+
+Áp luật cho `a` thì `F(x)` có hai phần là đối tượng, nên thành đối tượng `F(a)`: có rồi thì
+dùng, chưa có thì bước áp luật tạo ra nó đúng như `Apply F to a`, có kiểm `a ∈ Domain(F)`.
+Kiểm không qua thì bước không đi qua, và thứ thiếu là `a ∈ Domain(F)`. Kết luận nêu trong
+chính câu `By rule` cũng được tạo `F(a)` theo cách đó. Lấy nhân chứng ra khỏi `there exists`
+và kiểm điều một scope đã chứng minh thì chỉ tạo đối tượng `F(a)`, không ghi `(a, F(a)) ∈ F`.
+Bảng giá trị `(F, a) → F(a)` nằm trong World và đi theo journal, nên giá trị tạo trong một
+scope mất cùng scope. Lấy `there exists` từ một mệnh đề có `F(w)` với `w` là nhân chứng thì
+`F(w)` thành `F(x)` của biến mới.
 
 ```
 Let F be a map.
@@ -598,7 +611,8 @@ Cơ chế giữ hai chiều:
 
 Biến buộc bên trong thân thành `(Var, k)` với `k` là chỉ số de Bruijn, không phải tên. Bắt
 buộc phải thế: hai mệnh đề chỉ khác tên biến buộc là cùng một mệnh đề, nên đại diện của
-chúng phải trùng, và chỉ số làm chuyện đó tự đúng. Nhìn vào là đọc được hình dạng, vì tuple
+chúng phải trùng, và chỉ số làm chuyện đó tự đúng. `F(x)` viết thành `(App, F, x)`, với `x`
+viết như trên. Nhìn vào là đọc được hình dạng, vì tuple
 đọc được.
 
 Trong nguồn, `[A]` là đại diện của mệnh đề `A`, và `[(h)]` là đại diện của mệnh đề mang nhãn
@@ -971,6 +985,10 @@ Dài nhất thắng; hai mẫu cùng khớp cùng độ dài mà không phân bi
 chọn bừa. Giới hạn: `where` chỉ kiểm được khi chỗ điền là đối tượng cụ thể, còn biến của
 luật thì bỏ qua.
 
+`where` cũng là những gì giả sử về lỗ ở vế phải, nên parser đọc nó trước vế phải. `F(X)` trong
+vế phải cần `X in Domain(F)` trong `where`, đúng phép kiểm như `F(x)` trong luật. Sau `in` của
+`where` là term bất kỳ.
+
 ## Quan hệ và nhãn của cơ chế
 
 Mọi thứ dưới đây là đối tượng thường, gọi được bằng tên trong nguồn. Cơ chế ghi vào chúng;
@@ -990,7 +1008,7 @@ lý thuyết đọc chúng. Không có cái nào mang nghĩa logic cho tới khi
 | `Instance` | `Instantiate (h) at t.` ghi `(đại diện h, t, đại diện thể hiện)` |
 
 Nhãn dựng đại diện và biểu thức: `Mem`, `NotMem`, `And`, `Or`, `Implies`, `Iff`, `Not`,
-`All`, `Ex`, `Var`, và `Plus`, `Minus`, `Times`, `Div`, `Pow`.
+`All`, `Ex`, `Var`, `App`, và `Plus`, `Minus`, `Times`, `Div`, `Pow`.
 
 ## Vòng đời một chương trình
 
